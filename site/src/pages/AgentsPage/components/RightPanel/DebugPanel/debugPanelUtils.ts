@@ -93,7 +93,7 @@ const humanizeToken = (value: string): string => {
 		.replace(/\b\w/g, (match) => match.toUpperCase());
 };
 
-const safeJsonStringify = (value: unknown): string => {
+export const safeJsonStringify = (value: unknown): string => {
 	if (typeof value === "string") {
 		return value;
 	}
@@ -1161,7 +1161,14 @@ export const clampContent = (text: string, maxLen: number): string => {
 	if (trimmed.length <= maxLen) {
 		return trimmed;
 	}
-	return `${trimmed.slice(0, maxLen).trimEnd()}…`;
+	// Use Array.from to split on code points rather than UTF-16 code
+	// units. A plain String.slice can cut a surrogate pair in half,
+	// producing a lone high surrogate rendered as U+FFFD.
+	const codePoints = Array.from(trimmed);
+	if (codePoints.length <= maxLen) {
+		return trimmed;
+	}
+	return `${codePoints.slice(0, maxLen).join("").trimEnd()}…`;
 };
 
 // ---------------------------------------------------------------------------

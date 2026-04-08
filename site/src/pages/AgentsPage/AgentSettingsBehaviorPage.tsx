@@ -1,6 +1,7 @@
 import type { FC } from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import {
+	chatDebugLogging,
 	chatDesktopEnabled,
 	chatModelConfigs,
 	chatRetentionDays,
@@ -8,12 +9,15 @@ import {
 	chatUserCustomPrompt,
 	chatWorkspaceTTL,
 	deleteUserCompactionThreshold,
+	updateChatDebugLogging,
 	updateChatDesktopEnabled,
 	updateChatRetentionDays,
 	updateChatSystemPrompt,
 	updateChatWorkspaceTTL,
 	updateUserChatCustomPrompt,
+	updateUserChatDebugLogging,
 	updateUserCompactionThreshold,
+	userChatDebugLogging,
 	userCompactionThresholds,
 } from "#/api/queries/chats";
 import { useAuthenticated } from "#/hooks/useAuthenticated";
@@ -39,6 +43,19 @@ const AgentSettingsBehaviorPage: FC = () => {
 	const desktopEnabledQuery = useQuery(chatDesktopEnabled());
 	const saveDesktopEnabledMutation = useMutation(
 		updateChatDesktopEnabled(queryClient),
+	);
+
+	const debugLoggingQuery = useQuery({
+		...chatDebugLogging(),
+		enabled: permissions.editDeploymentConfig,
+	});
+	const saveDebugLoggingMutation = useMutation(
+		updateChatDebugLogging(queryClient),
+	);
+
+	const userDebugLoggingQuery = useQuery(userChatDebugLogging());
+	const saveUserDebugLoggingMutation = useMutation(
+		updateUserChatDebugLogging(queryClient),
 	);
 
 	const workspaceTTLQuery = useQuery(chatWorkspaceTTL());
@@ -79,6 +96,8 @@ const AgentSettingsBehaviorPage: FC = () => {
 			systemPromptData={systemPromptQuery.data}
 			userPromptData={userPromptQuery.data}
 			desktopEnabledData={desktopEnabledQuery.data}
+			debugLoggingData={debugLoggingQuery.data}
+			userDebugLoggingData={userDebugLoggingQuery.data}
 			workspaceTTLData={workspaceTTLQuery.data}
 			isWorkspaceTTLLoading={workspaceTTLQuery.isLoading}
 			isWorkspaceTTLLoadError={workspaceTTLQuery.isError}
@@ -99,6 +118,12 @@ const AgentSettingsBehaviorPage: FC = () => {
 			onSaveDesktopEnabled={saveDesktopEnabledMutation.mutate}
 			isSavingDesktopEnabled={saveDesktopEnabledMutation.isPending}
 			isSaveDesktopEnabledError={saveDesktopEnabledMutation.isError}
+			onSaveDebugLogging={saveDebugLoggingMutation.mutate}
+			isSavingDebugLogging={saveDebugLoggingMutation.isPending}
+			isSaveDebugLoggingError={saveDebugLoggingMutation.isError}
+			onSaveUserDebugLogging={saveUserDebugLoggingMutation.mutate}
+			isSavingUserDebugLogging={saveUserDebugLoggingMutation.isPending}
+			isSaveUserDebugLoggingError={saveUserDebugLoggingMutation.isError}
 			onSaveWorkspaceTTL={saveWorkspaceTTLMutation.mutate}
 			isSavingWorkspaceTTL={saveWorkspaceTTLMutation.isPending}
 			isSaveWorkspaceTTLError={saveWorkspaceTTLMutation.isError}
