@@ -9,10 +9,13 @@ import (
 	"reflect"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unicode/utf8"
 
 	"charm.land/fantasy"
 	"golang.org/x/xerrors"
+
+	"cdr.dev/slog/v3"
 )
 
 type debugModel struct {
@@ -354,6 +357,10 @@ func wrapStreamSeq(
 		streamComplete atomic.Bool
 	)
 
+	// heartbeatDone is closed when the stream finalizes (either
+	// normally or via the safety net) to stop the heartbeat goroutine.
+	heartbeatDone := make(chan struct{})
+
 	// Safety net: if the caller drops the returned iterator without
 	// consuming it (or abandons mid-stream and the context is
 	// canceled), finalize the step so it does not remain permanently
@@ -368,8 +375,38 @@ func wrapStreamSeq(
 			return
 		}
 		finalized = true
+		close(heartbeatDone)
 		handle.finish(ctx, StatusInterrupted, nil, nil, nil, nil)
 	})
+
+	// Heartbeat: periodically touch the step's and run's updated_at so
+	// the stale sweep does not prematurely finalize long-running streams.
+	// The interval is half the stale threshold to guarantee at least one
+	// touch before the sweep considers the row abandoned.  The goroutine
+	// exits when the stream finalizes (heartbeatDone), the context is
+	// canceled (ctx.Done), or the AfterFunc safety net fires — all of
+	// which close heartbeatDone or cancel ctx.
+	if handle.svc != nil {
+		go func() {
+			ticker := time.NewTicker(handle.svc.heartbeatInterval())
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-heartbeatDone:
+					return
+				case <-ticker.C:
+					if err := handle.svc.TouchStep(ctx, handle.stepCtx.StepID, handle.stepCtx.RunID, handle.stepCtx.ChatID); err != nil {
+						handle.svc.log.Debug(ctx, "stream heartbeat touch failed",
+							slog.Error(err),
+							slog.F("step_id", handle.stepCtx.StepID),
+						)
+					}
+				}
+			}
+		}()
+	}
 
 	return func(yield func(fantasy.StreamPart) bool) {
 		var (
@@ -386,7 +423,7 @@ func wrapStreamSeq(
 		)
 
 		finalize := func(status Status) {
-			// Cancel the safety net since we're finalizing normally.
+			// Cancel the safety net and heartbeat since we're finalizing.
 			if stop != nil {
 				stop()
 			}
@@ -396,6 +433,7 @@ func wrapStreamSeq(
 				return
 			}
 			finalized = true
+			close(heartbeatDone)
 
 			summary.FinishReason = string(finishReason)
 
@@ -506,6 +544,9 @@ func wrapObjectStreamSeq(
 		finalized      bool
 		streamComplete atomic.Bool
 	)
+
+	heartbeatDone := make(chan struct{})
+
 	stop := context.AfterFunc(ctx, func() {
 		mu.Lock()
 		defer mu.Unlock()
@@ -513,8 +554,33 @@ func wrapObjectStreamSeq(
 			return
 		}
 		finalized = true
+		close(heartbeatDone)
 		handle.finish(ctx, StatusInterrupted, nil, nil, nil, nil)
 	})
+
+	// Heartbeat: same pattern as wrapStreamSeq — keep the step and
+	// run alive during long-running structured-output streams.
+	if handle.svc != nil {
+		go func() {
+			ticker := time.NewTicker(handle.svc.heartbeatInterval())
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-heartbeatDone:
+					return
+				case <-ticker.C:
+					if err := handle.svc.TouchStep(ctx, handle.stepCtx.StepID, handle.stepCtx.RunID, handle.stepCtx.ChatID); err != nil {
+						handle.svc.log.Debug(ctx, "object stream heartbeat touch failed",
+							slog.Error(err),
+							slog.F("step_id", handle.stepCtx.StepID),
+						)
+					}
+				}
+			}
+		}()
+	}
 
 	return func(yield func(fantasy.ObjectStreamPart) bool) {
 		var (
@@ -539,6 +605,7 @@ func wrapObjectStreamSeq(
 				return
 			}
 			finalized = true
+			close(heartbeatDone)
 
 			summary.FinishReason = string(finishReason)
 
