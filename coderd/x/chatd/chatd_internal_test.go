@@ -33,6 +33,15 @@ import (
 	"github.com/coder/quartz"
 )
 
+// TestWaitForActiveChatStop and TestWaitForActiveChatStop_WaitsForReplacementRun
+// were removed along with the process-local activeChats mechanism.
+// Debug cleanup is now best-effort; stale finalization handles orphaned rows.
+
+// TestArchiveChatWaitsForActiveChatStop and
+// TestArchiveChatWaitsForEveryInterruptedChat were removed along with
+// the process-local activeChats mechanism. Archive cleanup is now
+// best-effort; stale finalization handles any orphaned rows.
+
 func TestRegenerateChatTitle_PersistsAndBroadcasts(t *testing.T) {
 	t.Parallel()
 

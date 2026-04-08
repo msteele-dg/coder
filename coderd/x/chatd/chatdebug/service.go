@@ -367,7 +367,7 @@ func (s *Service) CreateStep(
 	}
 
 	return database.ChatDebugStep{}, xerrors.Errorf(
-		"failed to create debug step after %d attempts (run_id=%s)",
+		"chatdebug: failed to create step after %d retries (run %s)",
 		maxCreateStepRetries, params.RunID,
 	)
 }

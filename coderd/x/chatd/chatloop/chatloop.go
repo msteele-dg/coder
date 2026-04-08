@@ -20,6 +20,7 @@ import (
 	"golang.org/x/xerrors"
 
 	"github.com/coder/coder/v2/coderd/database/dbtime"
+	"github.com/coder/coder/v2/coderd/x/chatd/chatdebug"
 	"github.com/coder/coder/v2/coderd/x/chatd/chaterror"
 	"github.com/coder/coder/v2/coderd/x/chatd/chatprompt"
 	"github.com/coder/coder/v2/coderd/x/chatd/chatretry"
@@ -368,7 +369,8 @@ func Run(ctx context.Context, opts RunOptions) error {
 			}
 
 			var result stepResult
-			err := chatretry.Retry(ctx, func(retryCtx context.Context) error {
+			stepCtx := chatdebug.ReuseStep(ctx)
+			err := chatretry.Retry(stepCtx, func(retryCtx context.Context) error {
 				attempt, streamErr := guardedStream(
 					retryCtx,
 					opts.Model.Provider(),
