@@ -19,6 +19,15 @@ const baseProps = {
 	desktopEnabledData: {
 		enable_desktop: false,
 	} as TypesGen.ChatDesktopEnabledResponse,
+	debugLoggingData: {
+		debug_logging_enabled: false,
+		forced_by_deployment: false,
+	} as TypesGen.ChatDebugLoggingAdminSettings,
+	userDebugLoggingData: {
+		debug_logging_enabled: false,
+		user_toggle_allowed: false,
+		forced_by_deployment: false,
+	} as TypesGen.UserChatDebugLoggingSettings,
 	workspaceTTLData: {
 		workspace_ttl_ms: 0,
 	} as TypesGen.ChatWorkspaceTTLResponse,
@@ -36,6 +45,10 @@ const baseProps = {
 	isSaveUserPromptError: false,
 	isSavingDesktopEnabled: false,
 	isSaveDesktopEnabledError: false,
+	isSavingDebugLogging: false,
+	isSaveDebugLoggingError: false,
+	isSavingUserDebugLogging: false,
+	isSaveUserDebugLoggingError: false,
 	isSavingWorkspaceTTL: false,
 	isSaveWorkspaceTTLError: false,
 };
@@ -48,6 +61,8 @@ const meta = {
 		onSaveSystemPrompt: fn(),
 		onSaveUserPrompt: fn(),
 		onSaveDesktopEnabled: fn(),
+		onSaveDebugLogging: fn(),
+		onSaveUserDebugLogging: fn(),
 		onSaveWorkspaceTTL: fn(),
 		onSaveThreshold: fn(),
 		onResetThreshold: fn(),
