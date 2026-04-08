@@ -784,6 +784,7 @@ func New(options *Options) *API {
 			SubscribeFn:                    options.ChatSubscribeFn,
 			MaxChatsPerAcquire:             int32(maxChatsPerAcquire), //nolint:gosec // maxChatsPerAcquire is clamped to int32 range above.
 			ProviderAPIKeys:                ChatProviderAPIKeysFromDeploymentValues(options.DeploymentValues),
+			AlwaysEnableDebugLogs:          options.DeploymentValues.AI.Chat.DebugLoggingEnabled.Value(),
 			AgentConn:                      api.agentProvider.AgentConn,
 			AgentInactiveDisconnectTimeout: api.AgentInactiveDisconnectTimeout,
 			InstructionLookupTimeout:       options.ChatdInstructionLookupTimeout,
@@ -1182,6 +1183,10 @@ func New(options *Options) *API {
 				r.Put("/system-prompt", api.putChatSystemPrompt)
 				r.Get("/desktop-enabled", api.getChatDesktopEnabled)
 				r.Put("/desktop-enabled", api.putChatDesktopEnabled)
+				r.Get("/debug-logging", api.getChatDebugLogging)
+				r.Put("/debug-logging", api.putChatDebugLogging)
+				r.Get("/user-debug-logging", api.getUserChatDebugLogging)
+				r.Put("/user-debug-logging", api.putUserChatDebugLogging)
 				r.Get("/user-prompt", api.getUserChatCustomPrompt)
 				r.Put("/user-prompt", api.putUserChatCustomPrompt)
 				r.Get("/user-compaction-thresholds", api.getUserChatCompactionThresholds)
@@ -1251,6 +1256,10 @@ func New(options *Options) *API {
 				r.Route("/queue/{queuedMessage}", func(r chi.Router) {
 					r.Delete("/", api.deleteChatQueuedMessage)
 					r.Post("/promote", api.promoteChatQueuedMessage)
+				})
+				r.Route("/debug", func(r chi.Router) {
+					r.Get("/runs", api.getChatDebugRuns)
+					r.Get("/runs/{debugRun}", api.getChatDebugRun)
 				})
 			})
 		})

@@ -3195,6 +3195,140 @@ func (api *API) putChatDesktopEnabled(rw http.ResponseWriter, r *http.Request) {
 	rw.WriteHeader(http.StatusNoContent)
 }
 
+func (api *API) deploymentChatDebugLoggingEnabled() bool {
+	return api.DeploymentValues != nil && api.DeploymentValues.AI.Chat.DebugLoggingEnabled.Value()
+}
+
+// EXPERIMENTAL: this endpoint is experimental and is subject to change.
+//
+//nolint:revive // get-return: revive assumes get* must be a getter, but this is an HTTP handler.
+func (api *API) getChatDebugLogging(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !api.Authorize(r, policy.ActionUpdate, rbac.ResourceDeploymentConfig) {
+		httpapi.ResourceNotFound(rw)
+		return
+	}
+
+	enabled, err := api.Database.GetChatDebugLoggingEnabled(ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+			Message: "Internal error fetching chat debug logging setting.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	httpapi.Write(ctx, rw, http.StatusOK, codersdk.ChatDebugLoggingAdminSettings{
+		DebugLoggingEnabled: err == nil && enabled,
+		ForcedByDeployment:  api.deploymentChatDebugLoggingEnabled(),
+	})
+}
+
+// EXPERIMENTAL: this endpoint is experimental and is subject to change.
+func (api *API) putChatDebugLogging(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !api.Authorize(r, policy.ActionUpdate, rbac.ResourceDeploymentConfig) {
+		httpapi.Forbidden(rw)
+		return
+	}
+
+	var req codersdk.UpdateChatDebugLoggingAllowUsersRequest
+	if !httpapi.Read(ctx, rw, r, &req) {
+		return
+	}
+	if err := api.Database.UpsertChatDebugLoggingEnabled(ctx, req.AllowUsers); err != nil {
+		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+			Message: "Internal error updating chat debug logging setting.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	rw.WriteHeader(http.StatusNoContent)
+}
+
+// EXPERIMENTAL: this endpoint is experimental and is subject to change.
+//
+//nolint:revive // get-return: revive assumes get* must be a getter, but this is an HTTP handler.
+func (api *API) getUserChatDebugLogging(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	apiKey := httpmw.APIKey(r)
+
+	forcedByDeployment := api.deploymentChatDebugLoggingEnabled()
+	allowUsers := false
+	if !forcedByDeployment {
+		enabled, err := api.Database.GetChatDebugLoggingEnabled(ctx)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+				Message: "Internal error fetching chat debug logging setting.",
+				Detail:  err.Error(),
+			})
+			return
+		}
+		allowUsers = err == nil && enabled
+	}
+
+	debugEnabled := forcedByDeployment
+	if allowUsers {
+		enabled, err := api.Database.GetUserChatDebugLoggingEnabled(ctx, apiKey.UserID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+				Message: "Internal error fetching user chat debug logging setting.",
+				Detail:  err.Error(),
+			})
+			return
+		}
+		debugEnabled = err == nil && enabled
+	}
+
+	httpapi.Write(ctx, rw, http.StatusOK, codersdk.UserChatDebugLoggingSettings{
+		DebugLoggingEnabled: debugEnabled,
+		UserToggleAllowed:   !forcedByDeployment && allowUsers,
+		ForcedByDeployment:  forcedByDeployment,
+	})
+}
+
+// EXPERIMENTAL: this endpoint is experimental and is subject to change.
+func (api *API) putUserChatDebugLogging(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	apiKey := httpmw.APIKey(r)
+	if api.deploymentChatDebugLoggingEnabled() {
+		httpapi.Write(ctx, rw, http.StatusConflict, codersdk.Response{
+			Message: "Chat debug logging is already forced on by deployment configuration.",
+		})
+		return
+	}
+
+	allowUsers, err := api.Database.GetChatDebugLoggingEnabled(ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+			Message: "Internal error fetching chat debug logging setting.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	if err != nil || !allowUsers {
+		httpapi.Write(ctx, rw, http.StatusForbidden, codersdk.Response{
+			Message: "An administrator has not enabled user-controlled chat debug logging.",
+		})
+		return
+	}
+
+	var req codersdk.UpdateUserChatDebugLoggingRequest
+	if !httpapi.Read(ctx, rw, r, &req) {
+		return
+	}
+	if err := api.Database.UpsertUserChatDebugLoggingEnabled(ctx, database.UpsertUserChatDebugLoggingEnabledParams{
+		UserID:              apiKey.UserID,
+		DebugLoggingEnabled: req.DebugLoggingEnabled,
+	}); err != nil {
+		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+			Message: "Internal error updating user chat debug logging setting.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	rw.WriteHeader(http.StatusNoContent)
+}
+
 // EXPERIMENTAL: this endpoint is experimental and is subject to change.
 //
 //nolint:revive // get-return: revive assumes get* must be a getter, but this is an HTTP handler.
@@ -5929,4 +6063,96 @@ func (api *API) postChatToolResults(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	rw.WriteHeader(http.StatusNoContent)
+}
+
+// getChatDebugRuns returns a list of debug run summaries for a chat.
+// EXPERIMENTAL
+//
+//nolint:revive // get-return: revive assumes get* must be a getter, but this is an HTTP handler.
+func (api *API) getChatDebugRuns(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	chat := httpmw.ChatParam(r)
+
+	const maxDebugRuns = 100
+	runs, err := api.Database.GetChatDebugRunsByChatID(ctx, database.GetChatDebugRunsByChatIDParams{
+		ChatID:   chat.ID,
+		LimitVal: maxDebugRuns,
+	})
+	if err != nil {
+		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+			Message: "Internal error fetching debug runs.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	summaries := make([]codersdk.ChatDebugRunSummary, 0, len(runs))
+	for _, r := range runs {
+		summaries = append(summaries, db2sdk.ChatDebugRunSummary(r))
+	}
+	httpapi.Write(ctx, rw, http.StatusOK, summaries)
+}
+
+// getChatDebugRun returns a single debug run with its steps.
+// EXPERIMENTAL
+//
+//nolint:revive // get-return: revive assumes get* must be a getter, but this is an HTTP handler.
+func (api *API) getChatDebugRun(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	chat := httpmw.ChatParam(r)
+
+	runIDStr := chi.URLParam(r, "debugRun")
+	runID, err := uuid.Parse(runIDStr)
+	if err != nil {
+		httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
+			Message: "Invalid debug run ID.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	run, err := api.Database.GetChatDebugRunByID(ctx, runID)
+	if err != nil {
+		// Treat both not-found and authorization failures as 404 to
+		// avoid leaking the existence of runs the caller cannot access.
+		if errors.Is(err, sql.ErrNoRows) || dbauthz.IsNotAuthorizedError(err) {
+			httpapi.Write(ctx, rw, http.StatusNotFound, codersdk.Response{
+				Message: "Debug run not found.",
+			})
+			return
+		}
+		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+			Message: "Internal error fetching debug run.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	// Verify the run belongs to this chat.
+	if run.ChatID != chat.ID {
+		httpapi.Write(ctx, rw, http.StatusNotFound, codersdk.Response{
+			Message: "Debug run not found.",
+		})
+		return
+	}
+
+	steps, err := api.Database.GetChatDebugStepsByRunID(ctx, run.ID)
+	if err != nil {
+		// The run may have been deleted or access may have changed
+		// between the two queries. Treat not-found/authz errors as
+		// 404 for consistency with the run lookup above.
+		if errors.Is(err, sql.ErrNoRows) || dbauthz.IsNotAuthorizedError(err) {
+			httpapi.Write(ctx, rw, http.StatusNotFound, codersdk.Response{
+				Message: "Debug run not found.",
+			})
+			return
+		}
+		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+			Message: "Internal error fetching debug steps.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	httpapi.Write(ctx, rw, http.StatusOK, db2sdk.ChatDebugRunDetail(run, steps))
 }
