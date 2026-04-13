@@ -4777,36 +4777,18 @@ func (p *Server) runChat(
 		// Pre-marshal all content outside the transaction so the
 		// FOR UPDATE lock is held only for the INSERT statements.
 		// Marshaling is pure CPU work with no database dependency.
+		assistantParts := buildAssistantPartsForPersist(
+			assistantBlocks,
+			toolResults,
+			step,
+			toolNameToConfigID,
+		)
+
 		var assistantContent pqtype.NullRawMessage
-		if len(assistantBlocks) > 0 {
-			sdkParts := make([]codersdk.ChatMessagePart, 0, len(assistantBlocks))
-			for _, block := range assistantBlocks {
-				part := chatprompt.PartFromContent(block)
-				if part.ToolName != "" {
-					if configID, ok := toolNameToConfigID[part.ToolName]; ok {
-						part.MCPServerConfigID = uuid.NullUUID{UUID: configID, Valid: true}
-					}
-				}
-				// Apply recorded timestamps so persisted
-				// tool-call parts carry accurate CreatedAt.
-				if part.Type == codersdk.ChatMessagePartTypeToolCall && part.ToolCallID != "" && step.ToolCallCreatedAt != nil {
-					if ts, ok := step.ToolCallCreatedAt[part.ToolCallID]; ok {
-						part.CreatedAt = &ts
-					}
-				}
-				// Provider-executed tool results appear in
-				// assistantBlocks rather than toolResults,
-				// so apply their timestamps here as well.
-				if part.Type == codersdk.ChatMessagePartTypeToolResult && part.ToolCallID != "" && step.ToolResultCreatedAt != nil {
-					if ts, ok := step.ToolResultCreatedAt[part.ToolCallID]; ok {
-						part.CreatedAt = &ts
-					}
-				}
-				sdkParts = append(sdkParts, part)
-			}
-			finalAssistantText = strings.TrimSpace(contentBlocksToText(sdkParts))
+		if len(assistantParts) > 0 {
+			finalAssistantText = strings.TrimSpace(contentBlocksToText(assistantParts))
 			var marshalErr error
-			assistantContent, marshalErr = chatprompt.MarshalParts(sdkParts)
+			assistantContent, marshalErr = chatprompt.MarshalParts(assistantParts)
 			if marshalErr != nil {
 				return xerrors.Errorf("marshal assistant content: %w", marshalErr)
 			}
@@ -5020,6 +5002,8 @@ func (p *Server) runChat(
 		model = cuModel
 	}
 
+	storeChatAttachment := p.newStoreChatAttachmentFunc(&workspaceCtx)
+
 	tools := []fantasy.AgentTool{
 		chattool.ReadFile(chattool.ReadFileOptions{
 			GetWorkspaceConn: workspaceCtx.getWorkspaceConn,
@@ -5031,6 +5015,10 @@ func (p *Server) runChat(
 		chattool.EditFiles(chattool.EditFilesOptions{
 			GetWorkspaceConn: workspaceCtx.getWorkspaceConn,
 			ResolvePlanPath:  resolvePlanPathForTools,
+		}),
+		chattool.AttachFile(chattool.AttachFileOptions{
+			GetWorkspaceConn: workspaceCtx.getWorkspaceConn,
+			StoreFile:        storeChatAttachment,
 		}),
 		chattool.Execute(chattool.ExecuteOptions{
 			GetWorkspaceConn: workspaceCtx.getWorkspaceConn,
@@ -5098,54 +5086,7 @@ func (p *Server) runChat(
 		tools = append(tools, chattool.ProposePlan(chattool.ProposePlanOptions{
 			GetWorkspaceConn: workspaceCtx.getWorkspaceConn,
 			ResolvePlanPath:  resolvePlanPathForTools,
-			StoreFile: func(ctx context.Context, name string, mediaType string, data []byte) (uuid.UUID, error) {
-				workspaceCtx.chatStateMu.Lock()
-				chatSnapshot := *workspaceCtx.currentChat
-				workspaceCtx.chatStateMu.Unlock()
-
-				if !chatSnapshot.WorkspaceID.Valid {
-					return uuid.Nil, xerrors.New("no workspace is associated with this chat. Use the create_workspace tool to create one")
-				}
-
-				ws, err := p.db.GetWorkspaceByID(ctx, chatSnapshot.WorkspaceID.UUID)
-				if err != nil {
-					return uuid.Nil, xerrors.Errorf("resolve workspace: %w", err)
-				}
-
-				row, err := p.db.InsertChatFile(ctx, database.InsertChatFileParams{
-					OwnerID:        chatSnapshot.OwnerID,
-					OrganizationID: ws.OrganizationID,
-					Name:           name,
-					Mimetype:       mediaType,
-					Data:           data,
-				})
-				if err != nil {
-					return uuid.Nil, xerrors.Errorf("insert chat file: %w", err)
-				}
-
-				// Cap enforcement and dedup are handled atomically
-				// in SQL. rejected > 0 = cap exceeded.
-				rejected, err := p.db.LinkChatFiles(ctx, database.LinkChatFilesParams{
-					ChatID:       chatSnapshot.ID,
-					MaxFileLinks: int32(codersdk.MaxChatFileIDs),
-					FileIds:      []uuid.UUID{row.ID},
-				})
-				switch {
-				case err != nil:
-					p.logger.Error(ctx, "failed to link file to chat",
-						slog.F("chat_id", chatSnapshot.ID),
-						slog.F("file_id", row.ID),
-						slog.Error(err),
-					)
-				case rejected > 0:
-					p.logger.Warn(ctx, "file cap reached, file not linked to chat",
-						slog.F("chat_id", chatSnapshot.ID),
-						slog.F("file_id", row.ID),
-						slog.F("max_file_links", codersdk.MaxChatFileIDs),
-					)
-				}
-				return row.ID, nil
-			},
+			StoreFile:        storeChatAttachment,
 		}))
 		tools = append(tools, p.subagentTools(ctx, func() database.Chat {
 			return chat
@@ -5223,6 +5164,7 @@ func (p *Server) runChat(
 				desktopGeometry.DeclaredWidth,
 				desktopGeometry.DeclaredHeight,
 				workspaceCtx.getWorkspaceConn,
+				storeChatAttachment,
 				quartz.NewReal(),
 			),
 		})
