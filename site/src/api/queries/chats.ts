@@ -1,5 +1,6 @@
 import type {
 	InfiniteData,
+	MutationOptions,
 	QueryClient,
 	UseInfiniteQueryOptions,
 } from "react-query";
@@ -730,6 +731,33 @@ export const chatDiffContents = (chatId: string) => ({
 	queryKey: chatDiffContentsKey(chatId),
 	queryFn: () => API.experimental.getChatDiffContents(chatId),
 });
+
+const chatACLKey = (chatId: string) => ["chats", chatId, "acl"] as const;
+
+export const chatACL = (chatId: string) => ({
+	queryKey: chatACLKey(chatId),
+	queryFn: () => API.experimental.getChatACL(chatId),
+});
+
+export const setChatUserRole = (
+	queryClient: QueryClient,
+): MutationOptions<
+	void,
+	unknown,
+	{ chatId: string; userId: string; role: TypesGen.ChatRole }
+> => {
+	return {
+		mutationFn: ({ chatId, userId, role }) =>
+			API.experimental.updateChatACL(chatId, {
+				user_roles: { [userId]: role },
+			}),
+		onSuccess: async (_res, { chatId }) => {
+			await queryClient.invalidateQueries({
+				queryKey: chatACLKey(chatId),
+			});
+		},
+	};
+};
 
 const chatSystemPromptKey = ["chat-system-prompt"] as const;
 

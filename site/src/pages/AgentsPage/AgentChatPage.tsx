@@ -31,6 +31,7 @@ import { workspaceById, workspaceByIdKey } from "#/api/queries/workspaces";
 import type * as TypesGen from "#/api/typesGenerated";
 import type { ChatMessagePart } from "#/api/typesGenerated";
 import { useProxy } from "#/contexts/ProxyContext";
+import { useAuthenticated } from "#/hooks/useAuthenticated";
 import {
 	getTerminalHref,
 	getVSCodeHref,
@@ -512,6 +513,7 @@ const _agentFieldGuard: Record<keyof _UncoveredAgentFields, true> = {};
 
 const AgentChatPage: FC = () => {
 	const { agentId } = useParams<{ agentId: string }>();
+	const { user } = useAuthenticated();
 	const {
 		chatErrorReasons,
 		setChatErrorReason,
@@ -843,6 +845,11 @@ const AgentChatPage: FC = () => {
 	const isSubmissionPending =
 		isSendPending || isEditPending || isInterruptPending;
 	const isInputDisabled = !hasModelOptions || isArchived;
+
+	// Determine ownership by comparing the chat's owner_id with the
+	// authenticated user. Shared (non-owner) users see a read-only view.
+	const isOwner = chatQuery.data?.owner_id === user.id;
+	const isInputDisabledFinal = isInputDisabled || !isOwner;
 
 	const handleUsageLimitError = (error: unknown): void => {
 		if (!agentId) {
@@ -1238,6 +1245,7 @@ const AgentChatPage: FC = () => {
 			parentChat={parentChat}
 			persistedError={persistedError}
 			isArchived={isArchived}
+			isOwner={isOwner}
 			workspace={workspace}
 			workspaceAgent={workspaceAgent}
 			chatBuildId={chatQuery.data?.build_id}
@@ -1251,7 +1259,7 @@ const AgentChatPage: FC = () => {
 			hasModelOptions={hasModelOptions}
 			isModelCatalogLoading={isModelCatalogLoading}
 			compressionThreshold={compressionThreshold}
-			isInputDisabled={isInputDisabled}
+			isInputDisabled={isInputDisabledFinal}
 			isSubmissionPending={isSubmissionPending}
 			isInterruptPending={isInterruptPending}
 			isSidebarCollapsed={isSidebarCollapsed}

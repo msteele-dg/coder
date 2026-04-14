@@ -316,8 +316,15 @@ func (api *API) listChats(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// When shared=true, don't filter by owner so the RBAC filter
+	// returns all chats the user can read (own + shared via ACL).
+	ownerID := apiKey.UserID
+	if r.URL.Query().Get("shared") == "true" {
+		ownerID = uuid.Nil
+	}
+
 	params := database.GetChatsParams{
-		OwnerID:     apiKey.UserID,
+		OwnerID:     ownerID,
 		Archived:    searchParams.Archived,
 		AfterID:     paginationParams.AfterID,
 		LabelFilter: labelFilter,

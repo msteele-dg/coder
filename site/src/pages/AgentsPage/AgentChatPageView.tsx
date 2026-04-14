@@ -1,5 +1,6 @@
 import {
 	ArchiveIcon,
+	EyeIcon,
 	MonitorDotIcon,
 	MonitorIcon,
 	MonitorPauseIcon,
@@ -91,6 +92,7 @@ interface AgentChatPageViewProps {
 	parentChat: TypesGen.Chat | undefined;
 	persistedError: ChatDetailError | undefined;
 	isArchived: boolean;
+	isOwner: boolean;
 	workspaceAgent?: TypesGen.WorkspaceAgent;
 	workspace?: TypesGen.Workspace;
 	chatBuildId?: string;
@@ -183,6 +185,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 	parentChat,
 	persistedError,
 	isArchived,
+	isOwner,
 	workspaceAgent,
 	workspace,
 	chatBuildId,
@@ -351,6 +354,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 						<div className="relative z-10 shrink-0 overflow-visible">
 							{" "}
 							<ChatTopBar
+								chatId={agentId}
 								chatTitle={chatTitle}
 								parentChat={parentChat}
 								panel={{
@@ -377,16 +381,23 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 								isRegenerateTitleDisabled={isRegenerateTitleDisabled}
 								hasWorkspace={Boolean(workspace)}
 								isArchived={isArchived}
+								isOwner={isOwner}
 								diffStatusData={diffStatusData}
 								isSidebarCollapsed={isSidebarCollapsed}
 								onToggleSidebarCollapsed={onToggleSidebarCollapsed}
-							/>
+							/>{" "}
 							{isArchived && (
 								<div className="flex shrink-0 items-center gap-2 border-b border-border-default bg-surface-secondary px-4 py-2 text-xs text-content-secondary">
 									<ArchiveIcon className="h-4 w-4 shrink-0" />
 									This agent has been archived and is read-only.
 								</div>
 							)}
+							{!isOwner && !isArchived && (
+								<div className="flex shrink-0 items-center gap-2 border-b border-border-default bg-surface-secondary px-4 py-2 text-xs text-content-secondary">
+									<EyeIcon className="h-4 w-4 shrink-0" />
+									Read only — this chat was shared with you.
+								</div>
+							)}{" "}
 							<div
 								aria-hidden
 								className="pointer-events-none absolute inset-x-0 top-full z-10 h-3 sm:h-6 bg-surface-primary"

@@ -118,6 +118,7 @@ const StoryAgentChatPageView: FC<StoryProps> = ({ editing, ...overrides }) => {
 		persistedError: undefined as ChatDetailError | undefined,
 		parentChat: undefined as TypesGen.Chat | undefined,
 		isArchived: false,
+		isOwner: true,
 		store: createChatStore(),
 		effectiveSelectedModel: defaultModelConfigID,
 		setSelectedModel: fn(),

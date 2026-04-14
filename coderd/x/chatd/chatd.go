@@ -3674,6 +3674,25 @@ func (p *Server) publishChatPubsubEvent(chat database.Chat, kind codersdk.ChatWa
 			slog.Error(err),
 		)
 	}
+
+	// Also publish to each user in the chat's ACL so they receive
+	// realtime updates for shared chats.
+	for userIDStr := range chat.UserACL {
+		userID, err := uuid.Parse(userIDStr)
+		if err != nil {
+			continue
+		}
+		if userID == chat.OwnerID {
+			continue // Already published above.
+		}
+		if err := p.pubsub.Publish(coderdpubsub.ChatWatchEventChannel(userID), payload); err != nil {
+			p.logger.Warn(context.Background(), "failed to publish chat event to shared user",
+				slog.F("chat_id", chat.ID),
+				slog.F("shared_user_id", userID),
+				slog.Error(err),
+			)
+		}
+	}
 }
 
 // pendingToStreamToolCalls converts a slice of chatloop pending
