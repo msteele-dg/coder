@@ -17,7 +17,7 @@ import { useNavigate, useOutletContext, useParams } from "react-router";
 import { toast } from "sonner";
 import type { UrlTransform } from "streamdown";
 import { API, watchWorkspace } from "#/api/api";
-import { isApiError } from "#/api/errors";
+import { getErrorMessage, isApiError } from "#/api/errors";
 import { buildOptimisticEditedMessage } from "#/api/queries/chatMessageEdits";
 import {
 	chat,
@@ -760,6 +760,7 @@ const AgentChatPage: FC = () => {
 		promoteChatQueuedMessage(queryClient, agentId ?? ""),
 	);
 	const { mutateAsync: forkChatAsync } = useMutation(forkChat(queryClient));
+	const forkingRef = useRef(false);
 	const navigate = useNavigate();
 
 	const { store, clearStreamError, upsertCacheMessages } = useChatStore({
@@ -1220,15 +1221,19 @@ const AgentChatPage: FC = () => {
 
 	const handleForkFromMessage = useCallback(
 		async (messageId: number) => {
-			if (!agentId) return;
+			if (!agentId || forkingRef.current) return;
+			forkingRef.current = true;
 			try {
 				const newChat = await forkChatAsync({
 					chatId: agentId,
 					req: { message_id: messageId },
 				});
+				forkingRef.current = false;
 				navigate(`/agents/${newChat.id}`);
-			} catch {
-				toast.error("Failed to fork chat.");
+			} catch (error) {
+				forkingRef.current = false;
+				const message = getErrorMessage(error, "Failed to fork chat.");
+				toast.error(message);
 			}
 		},
 		[agentId, forkChatAsync, navigate],
