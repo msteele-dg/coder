@@ -1055,7 +1055,7 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 			</div>
 			{/* Selector row — sits outside the composer box. */}
 			{(showOrgSelector || !isModelCatalogLoading) && (
-				<div className="mx-auto flex w-full max-w-3xl items-center gap-1 px-1 pt-1">
+				<div className="mx-auto flex w-full max-w-3xl items-center gap-1 px-1 pt-0.5">
 					{showOrgSelector && orgOptions && (
 						<CompactOrgSelector
 							value={selectedOrg ?? null}
