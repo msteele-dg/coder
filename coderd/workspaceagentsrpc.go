@@ -258,6 +258,7 @@ func (api *API) startAgentYamuxMonitor(ctx context.Context,
 		replicaID:         api.ID,
 		updater:           api,
 		disconnectTimeout: api.AgentInactiveDisconnectTimeout,
+		metrics:           api.lifecycleMetrics,
 		logger: api.Logger.With(
 			slog.F("workspace_id", workspaceBuild.WorkspaceID),
 			slog.F("agent_id", workspaceAgent.ID),
@@ -291,6 +292,7 @@ type agentConnectionMonitor struct {
 	updater        workspaceUpdater
 	logger         slog.Logger
 	pingPeriod     time.Duration
+	metrics        *agentapi.LifecycleMetrics
 
 	// state manipulated by both sendPings() and monitor() goroutines: needs to be threadsafe
 	lastPing atomic.Pointer[time.Time]
@@ -355,6 +357,26 @@ func (m *agentConnectionMonitor) init() {
 		m.firstConnectedAt = sql.NullTime{
 			Time:  now,
 			Valid: true,
+		}
+		// Record first connection duration. This is the first time
+		// this agent has connected, so created_at -> now is the
+		// connection delay.
+		if m.metrics != nil {
+			duration := now.Sub(m.workspaceAgent.CreatedAt).Seconds()
+			if duration < 0 {
+				m.logger.Warn(context.Background(), "negative agent first connection duration, possible clock skew",
+					slog.F("created_at", m.workspaceAgent.CreatedAt),
+					slog.F("first_connected_at", now),
+					slog.F("duration_s", duration),
+				)
+			} else {
+				m.metrics.FirstConnectionDuration.WithLabelValues(
+					m.workspace.TemplateName,
+					m.workspaceAgent.Name,
+					m.workspace.OwnerUsername,
+					m.workspace.Name,
+				).Observe(duration)
+			}
 		}
 	}
 	m.lastConnectedAt = sql.NullTime{

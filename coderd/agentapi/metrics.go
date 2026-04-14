@@ -18,7 +18,8 @@ const BuildDurationMetricName = "template_workspace_build_duration_seconds"
 
 // LifecycleMetrics contains Prometheus metrics for the lifecycle API.
 type LifecycleMetrics struct {
-	BuildDuration *prometheus.HistogramVec
+	BuildDuration           *prometheus.HistogramVec
+	FirstConnectionDuration *prometheus.HistogramVec
 }
 
 // NewLifecycleMetrics creates and registers all lifecycle-related
@@ -53,8 +54,16 @@ func NewLifecycleMetrics(reg prometheus.Registerer) *LifecycleMetrics {
 			NativeHistogramMaxBucketNumber:  100,
 			NativeHistogramMinResetDuration: time.Hour,
 		}, []string{"template_name", "organization_name", "transition", "status", "is_prebuild"}),
+		FirstConnectionDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: "coderd",
+			Subsystem: "agents",
+			Name:      "first_connection_seconds",
+			Help:      "Duration from agent creation to first connection in seconds.",
+			Buckets:   []float64{1, 10, 30, 60, 120, 300, 600, 1800, 3600},
+		}, []string{"template_name", "agent_name", "username", "workspace_name"}),
 	}
 	reg.MustRegister(m.BuildDuration)
+	reg.MustRegister(m.FirstConnectionDuration)
 	return m
 }
 
