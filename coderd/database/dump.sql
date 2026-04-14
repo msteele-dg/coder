@@ -301,10 +301,6 @@ CREATE TYPE chat_status AS ENUM (
     'requires_action'
 );
 
-CREATE TYPE chat_turn_mode AS ENUM (
-    'plan'
-);
-
 CREATE TYPE connection_status AS ENUM (
     'connected',
     'disconnected'
@@ -1364,7 +1360,7 @@ CREATE TABLE chat_messages (
     runtime_ms bigint,
     deleted boolean DEFAULT false NOT NULL,
     provider_response_id text,
-    turn_mode chat_turn_mode
+    plan_mode chat_plan_mode
 );
 
 CREATE SEQUENCE chat_messages_id_seq
@@ -1421,7 +1417,7 @@ CREATE TABLE chat_queued_messages (
     chat_id uuid NOT NULL,
     content jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    turn_mode chat_turn_mode
+    plan_mode chat_plan_mode
 );
 
 CREATE SEQUENCE chat_queued_messages_id_seq

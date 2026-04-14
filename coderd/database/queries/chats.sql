@@ -475,7 +475,7 @@ INSERT INTO chat_messages (
     total_cost_micros,
     runtime_ms,
     provider_response_id,
-    turn_mode
+    plan_mode
 )
 SELECT
     @chat_id::uuid,
@@ -496,7 +496,7 @@ SELECT
     NULLIF(UNNEST(@total_cost_micros::bigint[]), 0),
     NULLIF(UNNEST(@runtime_ms::bigint[]), 0),
     NULLIF(UNNEST(@provider_response_id::text[]), ''),
-    NULLIF(UNNEST(@turn_mode::text[]), '')::chat_turn_mode
+    NULLIF(UNNEST(@plan_mode::text[]), '')::chat_plan_mode
 RETURNING
     *;
 
@@ -837,8 +837,8 @@ RETURNING
     *;
 
 -- name: InsertChatQueuedMessage :one
-INSERT INTO chat_queued_messages (chat_id, content, turn_mode)
-VALUES (@chat_id, @content, sqlc.narg('turn_mode')::chat_turn_mode)
+INSERT INTO chat_queued_messages (chat_id, content, plan_mode)
+VALUES (@chat_id, @content, sqlc.narg('plan_mode')::chat_plan_mode)
 RETURNING *;
 
 -- name: GetChatQueuedMessages :many

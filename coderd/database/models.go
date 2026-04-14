@@ -1415,61 +1415,6 @@ func AllChatStatusValues() []ChatStatus {
 	}
 }
 
-type ChatTurnMode string
-
-const (
-	ChatTurnModePlan ChatTurnMode = "plan"
-)
-
-func (e *ChatTurnMode) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = ChatTurnMode(s)
-	case string:
-		*e = ChatTurnMode(s)
-	default:
-		return fmt.Errorf("unsupported scan type for ChatTurnMode: %T", src)
-	}
-	return nil
-}
-
-type NullChatTurnMode struct {
-	ChatTurnMode ChatTurnMode `json:"chat_turn_mode"`
-	Valid        bool         `json:"valid"` // Valid is true if ChatTurnMode is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullChatTurnMode) Scan(value interface{}) error {
-	if value == nil {
-		ns.ChatTurnMode, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.ChatTurnMode.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullChatTurnMode) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.ChatTurnMode), nil
-}
-
-func (e ChatTurnMode) Valid() bool {
-	switch e {
-	case ChatTurnModePlan:
-		return true
-	}
-	return false
-}
-
-func AllChatTurnModeValues() []ChatTurnMode {
-	return []ChatTurnMode{
-		ChatTurnModePlan,
-	}
-}
-
 type ConnectionStatus string
 
 const (
@@ -4461,7 +4406,7 @@ type ChatMessage struct {
 	RuntimeMs           sql.NullInt64         `db:"runtime_ms" json:"runtime_ms"`
 	Deleted             bool                  `db:"deleted" json:"deleted"`
 	ProviderResponseID  sql.NullString        `db:"provider_response_id" json:"provider_response_id"`
-	TurnMode            NullChatTurnMode      `db:"turn_mode" json:"turn_mode"`
+	PlanMode            NullChatPlanMode      `db:"plan_mode" json:"plan_mode"`
 }
 
 type ChatModelConfig struct {
@@ -4504,7 +4449,7 @@ type ChatQueuedMessage struct {
 	ChatID    uuid.UUID        `db:"chat_id" json:"chat_id"`
 	Content   json.RawMessage  `db:"content" json:"content"`
 	CreatedAt time.Time        `db:"created_at" json:"created_at"`
-	TurnMode  NullChatTurnMode `db:"turn_mode" json:"turn_mode"`
+	PlanMode  NullChatPlanMode `db:"plan_mode" json:"plan_mode"`
 }
 
 type ChatUsageLimitConfig struct {
