@@ -46,6 +46,7 @@ import {
 	mapSubagentStatusToToolStatus,
 	parseArgs,
 	parseEditFilesArgs,
+	parseEditFilesResultDiffs,
 	stripNoNewline,
 	type ToolStatus,
 	toProviderLabel,
@@ -291,9 +292,15 @@ const EditFilesRenderer: FC<ToolRendererProps> = ({
 }) => {
 	const rec = asRecord(result);
 	const editFiles = parseEditFilesArgs(args);
-	const editDiffs = editFiles.map((file) =>
-		buildEditDiff(file.path, file.edits),
-	);
+
+	// Prefer diffs from the tool result (ed_script path) over
+	// synthetic diffs built from search/replace args.
+	const resultText = typeof result === "string" ? result : "";
+	const resultDiffs = parseEditFilesResultDiffs(resultText);
+	const editDiffs =
+		resultDiffs.length > 0
+			? resultDiffs
+			: editFiles.map((file) => buildEditDiff(file.path, file.edits));
 
 	return (
 		<EditFilesTool

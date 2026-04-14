@@ -10,6 +10,7 @@ export type ToolStatus = "completed" | "error" | "running";
 export interface EditFilesFileEntry {
 	path: string;
 	edits: Array<{ search: string; replace: string }>;
+	ed_script?: string;
 }
 
 const searchReplaceSchema = Yup.object({
@@ -25,6 +26,13 @@ const fileEntrySchema = Yup.object({
 }).required();
 
 type FileEntry = Yup.InferType<typeof fileEntrySchema>;
+
+const edScriptFileEntrySchema = Yup.object({
+	path: Yup.string().required(),
+	ed_script: Yup.string().required(),
+}).required();
+
+type EdScriptFileEntry = Yup.InferType<typeof edScriptFileEntrySchema>;
 
 export const toProviderLabel = (
 	providerDisplayName: string,
@@ -530,14 +538,26 @@ export const parseEditFilesArgs = (args: unknown): EditFilesFileEntry[] => {
 	if (!parsed) return [];
 	const files = parsed.files;
 	if (!Array.isArray(files)) return [];
-	return files
-		.filter((f): f is FileEntry => isValid(fileEntrySchema, f))
-		.map((f) => ({
-			path: f.path,
-			edits: f.edits.filter((e): e is SearchReplace =>
-				isValid(searchReplaceSchema, e),
-			),
-		}));
+	const result: EditFilesFileEntry[] = [];
+	for (const f of files) {
+		if (isValid(edScriptFileEntrySchema, f)) {
+			const entry = f as EdScriptFileEntry;
+			result.push({
+				path: entry.path,
+				edits: [],
+				ed_script: entry.ed_script,
+			});
+		} else if (isValid(fileEntrySchema, f)) {
+			const entry = f as FileEntry;
+			result.push({
+				path: entry.path,
+				edits: entry.edits.filter((e): e is SearchReplace =>
+					isValid(searchReplaceSchema, e),
+				),
+			});
+		}
+	}
+	return result;
 };
 
 /**
@@ -592,6 +612,24 @@ export function humanizeMCPToolName(
 	}
 	return words.charAt(0).toUpperCase() + words.slice(1);
 }
+
+/**
+ * Parses unified diffs from an edit_files tool result string.
+ * The result is raw unified diff output (one or more files).
+ * Returns one FileDiffMetadata per file found in the patch.
+ */
+export const parseEditFilesResultDiffs = (
+	resultText: string,
+): (FileDiffMetadata | null)[] => {
+	if (!resultText.trim()) {
+		return [];
+	}
+	const parsed = parsePatchFiles(resultText);
+	if (!parsed.length) {
+		return [];
+	}
+	return parsed.flatMap((p) => p.files.map((f) => f));
+};
 
 // Re-export runtime type utils used by sub-components so they
 // can import from a single location.

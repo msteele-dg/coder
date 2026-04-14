@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -376,22 +377,105 @@ func (api *API) HandleEditFiles(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Phase 1: compute all edits in memory. If any file fails
-	// (bad path, search miss, permission error), bail before
-	// writing anything.
-	var pending []pendingEdit
-	var combinedErr error
-	status := http.StatusOK
+	// Classification pass: separate search/replace from ed-script
+	// entries. Validate all entries upfront (before any writes).
+	type edScriptEntry struct {
+		path     string
+		script   string
+		origMode os.FileMode
+	}
+	var (
+		pending       []pendingEdit
+		edEntries     []edScriptEntry
+		combinedErr   error
+		status        = http.StatusOK
+		redPath       string
+		redPathLooked bool
+	)
+
 	for _, edit := range req.Files {
-		s, p, err := api.prepareFileEdit(edit.Path, edit.Edits)
-		if s > status {
-			status = s
-		}
-		if err != nil {
-			combinedErr = errors.Join(combinedErr, err)
-		}
-		if p != nil {
-			pending = append(pending, *p)
+		hasEdits := len(edit.Edits) > 0
+		hasEdScript := edit.EdScript != ""
+
+		switch {
+		case hasEdits && hasEdScript:
+			combinedErr = errors.Join(combinedErr,
+				xerrors.Errorf("%s: cannot specify both edits and ed_script", edit.Path))
+			status = http.StatusBadRequest
+		case !hasEdits && !hasEdScript:
+			combinedErr = errors.Join(combinedErr,
+				xerrors.Errorf("%s: must specify either edits or ed_script", edit.Path))
+			status = http.StatusBadRequest
+		case hasEdScript:
+			// Validate the ed-script entry upfront.
+			if edit.Path == "" {
+				combinedErr = errors.Join(combinedErr, xerrors.New("\"path\" is required"))
+				status = http.StatusBadRequest
+				continue
+			}
+			if !filepath.IsAbs(edit.Path) {
+				combinedErr = errors.Join(combinedErr,
+					xerrors.Errorf("file path must be absolute: %q", edit.Path))
+				status = http.StatusBadRequest
+				continue
+			}
+			resolved, err := api.resolveSymlink(edit.Path)
+			if err != nil {
+				combinedErr = errors.Join(combinedErr,
+					xerrors.Errorf("resolve symlink %q: %w", edit.Path, err))
+				status = http.StatusInternalServerError
+				continue
+			}
+			// Verify the file exists and is not a directory.
+			info, err := os.Stat(resolved)
+			if err != nil {
+				s := http.StatusInternalServerError
+				switch {
+				case errors.Is(err, os.ErrNotExist):
+					s = http.StatusNotFound
+				case errors.Is(err, os.ErrPermission):
+					s = http.StatusForbidden
+				}
+				combinedErr = errors.Join(combinedErr, err)
+				if s > status {
+					status = s
+				}
+				continue
+			}
+			if info.IsDir() {
+				combinedErr = errors.Join(combinedErr,
+					xerrors.Errorf("open %s: not a file", resolved))
+				status = http.StatusBadRequest
+				continue
+			}
+			// Check for red binary once per request.
+			if !redPathLooked {
+				redPath, _ = exec.LookPath("red")
+				redPathLooked = true
+			}
+			if redPath == "" {
+				httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+					Message: "ed_script requires the 'ed' package to be installed (provides 'red'); install it with: apt-get install ed",
+				})
+				return
+			}
+			edEntries = append(edEntries, edScriptEntry{
+				path:     resolved,
+				script:   edit.EdScript,
+				origMode: info.Mode(),
+			})
+		default:
+			// Search/replace path (existing logic).
+			s, p, err := api.prepareFileEdit(edit.Path, edit.Edits)
+			if s > status {
+				status = s
+			}
+			if err != nil {
+				combinedErr = errors.Join(combinedErr, err)
+			}
+			if p != nil {
+				pending = append(pending, *p)
+			}
 		}
 	}
 
@@ -402,9 +486,9 @@ func (api *API) HandleEditFiles(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Phase 2: write all files via atomicWrite. A failure here
-	// (e.g. disk full) can leave earlier files committed. True
-	// cross-file atomicity would require filesystem transactions.
+	var diffs []workspacesdk.FileEditDiff
+
+	// Phase 2: write all search/replace files via atomicWrite.
 	for _, p := range pending {
 		mode := p.mode
 		s, err := api.atomicWrite(ctx, p.path, &mode, strings.NewReader(p.content))
@@ -413,6 +497,23 @@ func (api *API) HandleEditFiles(rw http.ResponseWriter, r *http.Request) {
 				Message: err.Error(),
 			})
 			return
+		}
+	}
+
+	// Phase 3: process ed-script entries sequentially.
+	for _, entry := range edEntries {
+		diff, err := api.applyEdScript(ctx, entry.path, entry.script, entry.origMode)
+		if err != nil {
+			httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+				Message: err.Error(),
+			})
+			return
+		}
+		if diff != "" {
+			diffs = append(diffs, workspacesdk.FileEditDiff{
+				Path: entry.path,
+				Diff: diff,
+			})
 		}
 	}
 
@@ -427,9 +528,87 @@ func (api *API) HandleEditFiles(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	httpapi.Write(ctx, rw, http.StatusOK, codersdk.Response{
-		Message: "Successfully edited file(s)",
+	httpapi.Write(ctx, rw, http.StatusOK, workspacesdk.FileEditResponse{
+		Diffs: diffs,
 	})
+}
+
+// applyEdScript runs an ed script against a file atomically. It
+// copies the file to a temp location, runs red against the copy,
+// computes a unified diff, and renames the copy over the original.
+// Returns the diff string (empty if no changes) or an error.
+func (api *API) applyEdScript(ctx context.Context, path, script string, origMode os.FileMode) (string, error) {
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	tmpName := filepath.Join(dir, fmt.Sprintf(".%s.tmp.%s", base, uuid.New().String()[:8]))
+
+	// Copy original to temp file.
+	src, err := os.Open(path)
+	if err != nil {
+		return "", xerrors.Errorf("open %s: %w", path, err)
+	}
+	tmpFile, err := os.OpenFile(tmpName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, origMode)
+	if err != nil {
+		_ = src.Close()
+		return "", xerrors.Errorf("create temp file: %w", err)
+	}
+	_, err = io.Copy(tmpFile, src)
+	_ = src.Close()
+	_ = tmpFile.Close()
+	if err != nil {
+		_ = os.Remove(tmpName)
+		return "", xerrors.Errorf("copy %s to temp: %w", path, err)
+	}
+
+	cleanup := func() {
+		if rmErr := os.Remove(tmpName); rmErr != nil {
+			api.logger.Warn(ctx, "unable to clean up temp file",
+				slog.F("path", tmpName), slog.Error(rmErr))
+		}
+	}
+
+	// Build the ed script: prepend H (verbose errors), append
+	// w (write) and q (quit).
+	fullScript := "H\n" + script + "\nw\nq\n"
+
+	// Run red (restricted ed) against the temp file.
+	tmpBase := filepath.Base(tmpName)
+	cmd := api.execer.CommandContext(ctx, "red", "-s", tmpBase)
+	cmd.Dir = dir
+	cmd.Stdin = strings.NewReader(fullScript)
+	var combinedOut strings.Builder
+	cmd.Stdout = &combinedOut
+	cmd.Stderr = &combinedOut
+
+	if err := cmd.Run(); err != nil {
+		output := strings.TrimSpace(combinedOut.String())
+		cleanup()
+		if output != "" {
+			return "", xerrors.Errorf("ed script failed on %s: %s", path, output)
+		}
+		return "", xerrors.Errorf("ed script failed on %s: %w", path, err)
+	}
+
+	// Compute unified diff between original and edited temp.
+	diffCmd := api.execer.CommandContext(ctx, "diff", "-u", path, tmpName)
+	diffOut, diffErr := diffCmd.CombinedOutput()
+	// diff exits 0 = identical, 1 = different (expected), 2 = error.
+	if diffCmd.ProcessState != nil && diffCmd.ProcessState.ExitCode() == 2 {
+		cleanup()
+		return "", xerrors.Errorf("diff failed: %s", string(diffOut))
+	}
+	// Ignore exit code 1 (files differ) since that is the expected
+	// case when edits were applied.
+	_ = diffErr
+	diffStr := string(diffOut)
+
+	// Rename temp over original (atomic on same filesystem).
+	if err := os.Rename(tmpName, path); err != nil {
+		cleanup()
+		return "", xerrors.Errorf("rename temp to %s: %w", path, err)
+	}
+
+	return diffStr, nil
 }
 
 // prepareFileEdit validates, reads, and computes edits for a single
