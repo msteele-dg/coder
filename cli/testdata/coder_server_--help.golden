@@ -126,6 +126,11 @@ AI BRIDGE OPTIONS:
           the AWS Bedrock API in the form of
           'https://bedrock-runtime.<region>.amazonaws.com'.
 
+      --aibridge-bedrock-session-token string, $CODER_AIBRIDGE_BEDROCK_SESSION_TOKEN
+          The session token to use with temporary AWS credentials for the
+          Bedrock API. Only required when using temporary credentials with an
+          access key and secret.
+
       --aibridge-bedrock-small-fastmodel string, $CODER_AIBRIDGE_BEDROCK_SMALL_FAST_MODEL (default: global.anthropic.claude-haiku-4-5-20251001-v1:0)
           The small fast model to use when making requests to the AWS Bedrock
           API. Claude Code uses Haiku-class models to perform background tasks.

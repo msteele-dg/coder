@@ -412,6 +412,7 @@
   "base_url": "string",
   "model": "string",
   "region": "string",
+  "session_token": "string",
   "small_fast_model": "string"
 }
 ```
@@ -425,6 +426,7 @@
 | `base_url`          | string | false    |              |             |
 | `model`             | string | false    |              |             |
 | `region`            | string | false    |              |             |
+| `session_token`     | string | false    |              |             |
 | `small_fast_model`  | string | false    |              |             |
 
 ## codersdk.AIBridgeConfig
@@ -441,6 +443,7 @@
     "base_url": "string",
     "model": "string",
     "region": "string",
+    "session_token": "string",
     "small_fast_model": "string"
   },
   "circuit_breaker_enabled": true,
@@ -1220,6 +1223,7 @@
       "base_url": "string",
       "model": "string",
       "region": "string",
+      "session_token": "string",
       "small_fast_model": "string"
     },
     "circuit_breaker_enabled": true,
@@ -3244,6 +3248,7 @@ CreateWorkspaceRequest provides options for creating a new workspace. Only one o
           "base_url": "string",
           "model": "string",
           "region": "string",
+          "session_token": "string",
           "small_fast_model": "string"
         },
         "circuit_breaker_enabled": true,
@@ -3823,6 +3828,7 @@ CreateWorkspaceRequest provides options for creating a new workspace. Only one o
         "base_url": "string",
         "model": "string",
         "region": "string",
+        "session_token": "string",
         "small_fast_model": "string"
       },
       "circuit_breaker_enabled": true,

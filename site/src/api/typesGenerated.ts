@@ -34,6 +34,7 @@ export interface AIBridgeBedrockConfig {
 	readonly region: string;
 	readonly access_key: string;
 	readonly access_key_secret: string;
+	readonly session_token: string;
 	readonly model: string;
 	readonly small_fast_model: string;
 }

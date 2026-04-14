@@ -94,7 +94,11 @@ func newAIBridgeDaemon(coderAPI *coderd.API) (*aibridged.Server, error) {
 }
 
 func getBedrockConfig(cfg codersdk.AIBridgeBedrockConfig) *aibridge.AWSBedrockConfig {
-	if cfg.Region.String() == "" && cfg.BaseURL.String() == "" && cfg.AccessKey.String() == "" && cfg.AccessKeySecret.String() == "" {
+	// Bedrock is considered disabled when no region or base URL is configured.
+	// Static credentials are optional. When not provided, the AWS SDK default
+	// credential chain resolves credentials (environment variables, shared config,
+	// IAM roles, etc.).
+	if cfg.Region.String() == "" && cfg.BaseURL.String() == "" {
 		return nil
 	}
 
@@ -103,6 +107,7 @@ func getBedrockConfig(cfg codersdk.AIBridgeBedrockConfig) *aibridge.AWSBedrockCo
 		Region:          cfg.Region.String(),
 		AccessKey:       cfg.AccessKey.String(),
 		AccessKeySecret: cfg.AccessKeySecret.String(),
+		SessionToken:    cfg.SessionToken.String(),
 		Model:           cfg.Model.String(),
 		SmallFastModel:  cfg.SmallFastModel.String(),
 	}

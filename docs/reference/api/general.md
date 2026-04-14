@@ -189,6 +189,7 @@ curl -X GET http://coder-server:8080/api/v2/deployment/config \
           "base_url": "string",
           "model": "string",
           "region": "string",
+          "session_token": "string",
           "small_fast_model": "string"
         },
         "circuit_breaker_enabled": true,

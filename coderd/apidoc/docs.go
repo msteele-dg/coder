@@ -13094,6 +13094,9 @@ const docTemplate = `{
                 "region": {
                     "type": "string"
                 },
+                "session_token": {
+                    "type": "string"
+                },
                 "small_fast_model": {
                     "type": "string"
                 }

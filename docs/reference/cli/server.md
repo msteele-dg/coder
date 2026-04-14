@@ -1802,6 +1802,15 @@ The access key to authenticate against the AWS Bedrock API.
 
 The access key secret to use with the access key to authenticate against the AWS Bedrock API.
 
+### --aibridge-bedrock-session-token
+
+|             |                                                    |
+|-------------|----------------------------------------------------|
+| Type        | <code>string</code>                                |
+| Environment | <code>$CODER_AIBRIDGE_BEDROCK_SESSION_TOKEN</code> |
+
+The session token to use with temporary AWS credentials for the Bedrock API. Only required when using temporary credentials with an access key and secret.
+
 ### --aibridge-bedrock-model
 
 |             |                                                               |

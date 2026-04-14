@@ -99,6 +99,9 @@ func TestDeploymentValues_HighlyConfigurable(t *testing.T) {
 		"AI Bridge Bedrock Access Key Secret": {
 			yaml: true,
 		},
+		"AI Bridge Bedrock Session Token": {
+			yaml: true,
+		},
 	}
 
 	set := (&codersdk.DeploymentValues{}).Options()

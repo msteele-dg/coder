@@ -3728,6 +3728,16 @@ Write out the current server config as YAML to stdout.`,
 			Annotations: serpent.Annotations{}.Mark(annotationSecretKey, "true"),
 		},
 		{
+			Name:        "AI Bridge Bedrock Session Token",
+			Description: "The session token to use with temporary AWS credentials for the Bedrock API. Only required when using temporary credentials with an access key and secret.",
+			Flag:        "aibridge-bedrock-session-token",
+			Env:         "CODER_AIBRIDGE_BEDROCK_SESSION_TOKEN",
+			Value:       &c.AI.BridgeConfig.Bedrock.SessionToken,
+			Default:     "",
+			Group:       &deploymentGroupAIBridge,
+			Annotations: serpent.Annotations{}.Mark(annotationSecretKey, "true"),
+		},
+		{
 			Name:        "AI Bridge Bedrock Model",
 			Description: "The model to use when making requests to the AWS Bedrock API.",
 			Flag:        "aibridge-bedrock-model",
@@ -4082,6 +4092,7 @@ type AIBridgeBedrockConfig struct {
 	Region          serpent.String `json:"region" typescript:",notnull"`
 	AccessKey       serpent.String `json:"access_key" typescript:",notnull"`
 	AccessKeySecret serpent.String `json:"access_key_secret" typescript:",notnull"`
+	SessionToken    serpent.String `json:"session_token" typescript:",notnull"`
 	Model           serpent.String `json:"model" typescript:",notnull"`
 	SmallFastModel  serpent.String `json:"small_fast_model" typescript:",notnull"`
 }
