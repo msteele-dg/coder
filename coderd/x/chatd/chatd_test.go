@@ -1016,6 +1016,7 @@ func TestChainModeDisabledOnModeChange(t *testing.T) {
 		Content: []codersdk.ChatMessagePart{
 			codersdk.ChatMessageText(thirdPrompt),
 		},
+		PlanMode: &database.NullChatPlanMode{},
 	})
 	require.NoError(t, err)
 	waitForChatProcessed(ctx, t, db, chat.ID, server)
