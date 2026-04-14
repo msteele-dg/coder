@@ -472,16 +472,6 @@ func (api *API) postChats(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch req.TurnMode {
-	case codersdk.ChatTurnModePlan, "":
-		// Valid.
-	default:
-		httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
-			Message: "Invalid turn_mode value.",
-		})
-		return
-	}
-
 	switch req.PlanMode {
 	case codersdk.ChatPlanModePlan, "":
 		// Valid.
@@ -490,18 +480,6 @@ func (api *API) postChats(rw http.ResponseWriter, r *http.Request) {
 			Message: "Invalid plan_mode value.",
 		})
 		return
-	}
-
-	if req.PlanMode != "" && req.TurnMode != "" && req.PlanMode != codersdk.ChatPlanMode(req.TurnMode) {
-		httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
-			Message: "plan_mode and turn_mode conflict.",
-		})
-		return
-	}
-
-	effectivePlanMode := req.PlanMode
-	if effectivePlanMode == "" && req.TurnMode != "" {
-		effectivePlanMode = codersdk.ChatPlanMode(req.TurnMode)
 	}
 
 	// Validate MCP server IDs exist.
@@ -601,7 +579,7 @@ func (api *API) postChats(rw http.ResponseWriter, r *http.Request) {
 		WorkspaceID:        workspaceSelection.WorkspaceID,
 		Title:              title,
 		ModelConfigID:      modelConfigID,
-		PlanMode:           planModeToNullChatPlanMode(effectivePlanMode),
+		PlanMode:           planModeToNullChatPlanMode(req.PlanMode),
 		SystemPrompt:       req.SystemPrompt,
 		InitialUserContent: contentBlocks,
 		MCPServerIDs:       mcpServerIDs,
@@ -2047,16 +2025,6 @@ func (api *API) postChatMessages(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	switch req.TurnMode {
-	case codersdk.ChatTurnModePlan, "":
-		// Valid.
-	default:
-		httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
-			Message: "Invalid turn_mode value.",
-		})
-		return
-	}
-
 	if req.PlanMode != nil {
 		switch *req.PlanMode {
 		case codersdk.ChatPlanModePlan, "":
@@ -2069,20 +2037,9 @@ func (api *API) postChatMessages(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if req.PlanMode != nil && req.TurnMode != "" && *req.PlanMode != codersdk.ChatPlanMode(req.TurnMode) {
-		httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
-			Message: "plan_mode and turn_mode conflict.",
-		})
-		return
-	}
-
 	var sendPlanMode *database.NullChatPlanMode
-	switch {
-	case req.PlanMode != nil:
+	if req.PlanMode != nil {
 		resolvedPlanMode := planModeToNullChatPlanMode(*req.PlanMode)
-		sendPlanMode = &resolvedPlanMode
-	case req.TurnMode != "":
-		resolvedPlanMode := planModeToNullChatPlanMode(codersdk.ChatPlanMode(req.TurnMode))
 		sendPlanMode = &resolvedPlanMode
 	}
 

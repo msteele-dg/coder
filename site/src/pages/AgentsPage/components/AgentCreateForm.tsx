@@ -46,7 +46,7 @@ export type CreateChatOptions = {
 	model?: string;
 	mcpServerIds?: string[];
 	organizationId: string;
-	turnMode?: TypesGen.ChatTurnMode;
+	planMode?: TypesGen.ChatPlanMode;
 };
 
 /**
@@ -312,7 +312,7 @@ export const AgentCreateForm: FC<AgentCreateFormProps> = ({
 				selectedMCPServerIdsRef.current.length > 0
 					? [...selectedMCPServerIdsRef.current]
 					: undefined,
-			turnMode: planModeEnabled ? "plan" : undefined,
+			planMode: planModeEnabled ? "plan" : undefined,
 		}).catch((err) => {
 			// Re-enable draft persistence so the user can edit
 			// and retry after a failed send attempt, then rethrow

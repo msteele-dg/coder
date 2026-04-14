@@ -719,7 +719,7 @@ func TestPlanTurnRootPolicy(t *testing.T) {
 		OrganizationID: org.ID,
 		Title:          "plan-turn-root-policy",
 		ModelConfigID:  model.ID,
-		TurnMode:       "plan",
+		PlanMode:       database.NullChatPlanMode{ChatPlanMode: database.ChatPlanModePlan, Valid: true},
 		WorkspaceID:    uuid.NullUUID{UUID: ws.ID, Valid: true},
 		InitialUserContent: []codersdk.ChatMessagePart{
 			codersdk.ChatMessageText("Plan the feature"),
@@ -790,8 +790,8 @@ func TestPlanTurnRootPolicy(t *testing.T) {
 		}
 	}
 	require.NotNil(t, firstUserMsg, "expected child user message")
-	require.True(t, firstUserMsg.TurnMode.Valid)
-	require.Equal(t, database.ChatTurnModePlan, firstUserMsg.TurnMode.ChatTurnMode)
+	require.True(t, firstUserMsg.PlanMode.Valid)
+	require.Equal(t, database.ChatPlanModePlan, firstUserMsg.PlanMode.ChatPlanMode)
 }
 
 func TestStandardTurnHidesProposePlan(t *testing.T) {
@@ -888,7 +888,7 @@ func TestPlanTurnPromptContract(t *testing.T) {
 		OrganizationID: org.ID,
 		Title:          "plan-turn-prompt-contract",
 		ModelConfigID:  model.ID,
-		TurnMode:       "plan",
+		PlanMode:       database.NullChatPlanMode{ChatPlanMode: database.ChatPlanModePlan, Valid: true},
 		WorkspaceID:    uuid.NullUUID{UUID: ws.ID, Valid: true},
 		InitialUserContent: []codersdk.ChatMessagePart{
 			codersdk.ChatMessageText("Plan the rollout."),
@@ -991,7 +991,7 @@ func TestChainModeDisabledOnModeChange(t *testing.T) {
 		OrganizationID: org.ID,
 		Title:          "chain-mode-disabled-on-mode-change",
 		ModelConfigID:  model.ID,
-		TurnMode:       "plan",
+		PlanMode:       database.NullChatPlanMode{ChatPlanMode: database.ChatPlanModePlan, Valid: true},
 		InitialUserContent: []codersdk.ChatMessagePart{
 			codersdk.ChatMessageText(firstPrompt),
 		},
@@ -1005,7 +1005,7 @@ func TestChainModeDisabledOnModeChange(t *testing.T) {
 		Content: []codersdk.ChatMessagePart{
 			codersdk.ChatMessageText(secondPrompt),
 		},
-		TurnMode: "plan",
+		PlanMode: &database.NullChatPlanMode{ChatPlanMode: database.ChatPlanModePlan, Valid: true},
 	})
 	require.NoError(t, err)
 	waitForChatProcessed(ctx, t, db, chat.ID, server)

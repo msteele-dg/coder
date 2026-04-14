@@ -96,10 +96,10 @@ func (p *Server) isDesktopEnabled(ctx context.Context) bool {
 	return enabled
 }
 
-func (p *Server) subagentTools(ctx context.Context, currentChat func() database.Chat, parentTurnMode ...database.NullChatTurnMode) []fantasy.AgentTool {
-	var turnMode database.NullChatTurnMode
-	if len(parentTurnMode) > 0 {
-		turnMode = parentTurnMode[0]
+func (p *Server) subagentTools(ctx context.Context, currentChat func() database.Chat, parentPlanMode ...database.NullChatPlanMode) []fantasy.AgentTool {
+	var planMode database.NullChatPlanMode
+	if len(parentPlanMode) > 0 {
+		planMode = parentPlanMode[0]
 	}
 
 	spawnAgentDescription := "Spawn a delegated child agent to work on a clearly scoped, " +
@@ -119,7 +119,7 @@ func (p *Server) subagentTools(ctx context.Context, currentChat func() database.
 		"The child agent receives the same workspace tools but " +
 		"cannot spawn its own subagents. After spawning, use " +
 		"wait_agent to collect the result."
-	if turnMode.Valid && turnMode.ChatTurnMode == database.ChatTurnModePlan {
+	if planMode.Valid && planMode.ChatPlanMode == database.ChatPlanModePlan {
 		spawnAgentDescription += " During plan mode, spawned agents must only perform read-only investigation (exploring code, reading files, analyzing architecture). Do not delegate code writing, refactoring, or file mutations."
 	}
 
@@ -147,7 +147,7 @@ func (p *Server) subagentTools(ctx context.Context, currentChat func() database.
 					args.Prompt,
 					args.Title,
 					childSubagentChatOptions{
-						turnMode: turnMode,
+						planMode: planMode,
 					},
 				)
 				if err != nil {
@@ -386,7 +386,7 @@ func (p *Server) subagentTools(ctx context.Context, currentChat func() database.
 							Valid:    true,
 						},
 						systemPrompt: computerUseSubagentSystemPrompt + "\n\n" + strings.TrimSpace(args.Prompt),
-						turnMode:     turnMode,
+						planMode:     planMode,
 					},
 				)
 				if err != nil {
@@ -416,7 +416,7 @@ func parseSubagentToolChatID(raw string) (uuid.UUID, error) {
 type childSubagentChatOptions struct {
 	chatMode     database.NullChatMode
 	systemPrompt string
-	turnMode     database.NullChatTurnMode
+	planMode     database.NullChatPlanMode
 }
 
 func (p *Server) createChildSubagentChat(
@@ -580,7 +580,7 @@ func (p *Server) createChildSubagentChatWithOptions(
 			database.ChatMessageVisibilityBoth,
 			parent.LastModelConfigID,
 			chatprompt.CurrentContentVersion,
-		).withCreatedBy(parent.OwnerID).withTurnMode(opts.turnMode))
+		).withCreatedBy(parent.OwnerID).withPlanMode(opts.planMode))
 		if _, err := tx.InsertChatMessages(ctx, userParams); err != nil {
 			return xerrors.Errorf("insert initial child user message: %w", err)
 		}

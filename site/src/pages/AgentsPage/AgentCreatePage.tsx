@@ -46,7 +46,7 @@ const AgentCreatePage: FC = () => {
 		model,
 		mcpServerIds,
 		organizationId,
-		turnMode,
+		planMode,
 	}: CreateChatOptions) => {
 		const modelConfigID = model || nilUUID;
 		const content: TypesGen.ChatInputPart[] = [];
@@ -65,7 +65,7 @@ const AgentCreatePage: FC = () => {
 			model_config_id: modelConfigID,
 			mcp_server_ids:
 				mcpServerIds && mcpServerIds.length > 0 ? mcpServerIds : undefined,
-			plan_mode: turnMode === "plan" ? "plan" : undefined,
+			plan_mode: planMode === "plan" ? "plan" : undefined,
 		});
 
 		if (modelConfigID !== nilUUID) {
