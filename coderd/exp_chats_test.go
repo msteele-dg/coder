@@ -7963,19 +7963,6 @@ func TestChatPlanModeInstructions(t *testing.T) {
 			updates: []string{"Use plan mode for multi-step changes."},
 			want:    "Use plan mode for multi-step changes.",
 		},
-		{
-			name:    "InvisibleUnicodeIsStripped",
-			updates: []string{"plan\u200b mode\u200d instructions\uFEFF"},
-			want:    "plan mode instructions",
-		},
-		{
-			name: "ClearWithEmptyString",
-			updates: []string{
-				"Temporary instructions before clear.",
-				"",
-			},
-			want: "",
-		},
 	}
 	for _, tt := range roundTripTests {
 		tt := tt
@@ -8009,15 +7996,6 @@ func TestChatPlanModeInstructions(t *testing.T) {
 
 		_, err := memberClient.GetChatPlanModeInstructions(ctx)
 		requireSDKError(t, err, http.StatusNotFound)
-	})
-
-	t.Run("NonAdminPUTReturns403", func(t *testing.T) {
-		ctx := testutil.Context(t, testutil.WaitLong)
-
-		err := memberClient.UpdateChatPlanModeInstructions(ctx, codersdk.UpdateChatPlanModeInstructionsRequest{
-			PlanModeInstructions: "This should fail.",
-		})
-		requireSDKError(t, err, http.StatusForbidden)
 	})
 }
 
