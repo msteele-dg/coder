@@ -96,10 +96,10 @@ func (p *Server) isDesktopEnabled(ctx context.Context) bool {
 	return enabled
 }
 
-func (p *Server) subagentTools(ctx context.Context, currentChat func() database.Chat, parentPlanMode ...database.NullChatPlanMode) []fantasy.AgentTool {
+func (p *Server) subagentTools(ctx context.Context, currentChat func() database.Chat) []fantasy.AgentTool {
 	var planMode database.NullChatPlanMode
-	if len(parentPlanMode) > 0 {
-		planMode = parentPlanMode[0]
+	if currentChat != nil {
+		planMode = currentChat().PlanMode
 	}
 
 	spawnAgentDescription := "Spawn a delegated child agent to work on a clearly scoped, " +
@@ -146,9 +146,7 @@ func (p *Server) subagentTools(ctx context.Context, currentChat func() database.
 					parent,
 					args.Prompt,
 					args.Title,
-					childSubagentChatOptions{
-						planMode: planMode,
-					},
+					childSubagentChatOptions{},
 				)
 				if err != nil {
 					return fantasy.NewTextErrorResponse(err.Error()), nil
@@ -386,7 +384,6 @@ func (p *Server) subagentTools(ctx context.Context, currentChat func() database.
 							Valid:    true,
 						},
 						systemPrompt: computerUseSubagentSystemPrompt + "\n\n" + strings.TrimSpace(args.Prompt),
-						planMode:     planMode,
 					},
 				)
 				if err != nil {
@@ -416,7 +413,6 @@ func parseSubagentToolChatID(raw string) (uuid.UUID, error) {
 type childSubagentChatOptions struct {
 	chatMode     database.NullChatMode
 	systemPrompt string
-	planMode     database.NullChatPlanMode
 }
 
 func (p *Server) createChildSubagentChat(
@@ -580,7 +576,7 @@ func (p *Server) createChildSubagentChatWithOptions(
 			database.ChatMessageVisibilityBoth,
 			parent.LastModelConfigID,
 			chatprompt.CurrentContentVersion,
-		).withCreatedBy(parent.OwnerID).withPlanMode(opts.planMode))
+		).withCreatedBy(parent.OwnerID))
 		if _, err := tx.InsertChatMessages(ctx, userParams); err != nil {
 			return xerrors.Errorf("insert initial child user message: %w", err)
 		}

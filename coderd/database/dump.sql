@@ -1359,8 +1359,7 @@ CREATE TABLE chat_messages (
     total_cost_micros bigint,
     runtime_ms bigint,
     deleted boolean DEFAULT false NOT NULL,
-    provider_response_id text,
-    plan_mode chat_plan_mode
+    provider_response_id text
 );
 
 CREATE SEQUENCE chat_messages_id_seq
@@ -1416,8 +1415,7 @@ CREATE TABLE chat_queued_messages (
     id bigint NOT NULL,
     chat_id uuid NOT NULL,
     content jsonb NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    plan_mode chat_plan_mode
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 CREATE SEQUENCE chat_queued_messages_id_seq

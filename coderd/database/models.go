@@ -4406,7 +4406,6 @@ type ChatMessage struct {
 	RuntimeMs           sql.NullInt64         `db:"runtime_ms" json:"runtime_ms"`
 	Deleted             bool                  `db:"deleted" json:"deleted"`
 	ProviderResponseID  sql.NullString        `db:"provider_response_id" json:"provider_response_id"`
-	PlanMode            NullChatPlanMode      `db:"plan_mode" json:"plan_mode"`
 }
 
 type ChatModelConfig struct {
@@ -4445,11 +4444,10 @@ type ChatProvider struct {
 }
 
 type ChatQueuedMessage struct {
-	ID        int64            `db:"id" json:"id"`
-	ChatID    uuid.UUID        `db:"chat_id" json:"chat_id"`
-	Content   json.RawMessage  `db:"content" json:"content"`
-	CreatedAt time.Time        `db:"created_at" json:"created_at"`
-	PlanMode  NullChatPlanMode `db:"plan_mode" json:"plan_mode"`
+	ID        int64           `db:"id" json:"id"`
+	ChatID    uuid.UUID       `db:"chat_id" json:"chat_id"`
+	Content   json.RawMessage `db:"content" json:"content"`
+	CreatedAt time.Time       `db:"created_at" json:"created_at"`
 }
 
 type ChatUsageLimitConfig struct {

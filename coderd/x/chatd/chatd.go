@@ -988,7 +988,7 @@ func (p *Server) CreateChat(ctx context.Context, opts CreateOptions) (database.C
 			database.ChatMessageVisibilityBoth,
 			opts.ModelConfigID,
 			chatprompt.CurrentContentVersion,
-		).withCreatedBy(opts.OwnerID).withPlanMode(effectivePlanMode))
+		).withCreatedBy(opts.OwnerID))
 
 		_, err = tx.InsertChatMessages(ctx, msgParams)
 		if err != nil {
@@ -1083,8 +1083,6 @@ func (p *Server) SendMessage(
 			}
 		}
 
-		effectivePlanMode := lockedChat.PlanMode
-
 		existingQueued, err := tx.GetChatQueuedMessages(ctx, opts.ChatID)
 		if err != nil {
 			return xerrors.Errorf("get queued messages: %w", err)
@@ -1106,9 +1104,8 @@ func (p *Server) SendMessage(
 			}
 
 			queued, err := tx.InsertChatQueuedMessage(ctx, database.InsertChatQueuedMessageParams{
-				ChatID:   opts.ChatID,
-				Content:  content.RawMessage,
-				PlanMode: effectivePlanMode,
+				ChatID:  opts.ChatID,
+				Content: content.RawMessage,
 			})
 			if err != nil {
 				return xerrors.Errorf("insert queued message: %w", err)
@@ -1133,7 +1130,6 @@ func (p *Server) SendMessage(
 			modelConfigID,
 			content,
 			opts.CreatedBy,
-			effectivePlanMode,
 		)
 		if err != nil {
 			return err
@@ -1287,7 +1283,7 @@ func (p *Server) EditMessage(
 			existing.Visibility,
 			existing.ModelConfigID.UUID,
 			chatprompt.CurrentContentVersion,
-		).withCreatedBy(opts.CreatedBy).withPlanMode(existing.PlanMode))
+		).withCreatedBy(opts.CreatedBy))
 		newMessages, err := insertChatMessageWithStore(ctx, tx, msgParams)
 		if err != nil {
 			return xerrors.Errorf("insert replacement message: %w", err)
@@ -1513,14 +1509,12 @@ func (p *Server) PromoteQueued(
 		}
 
 		var (
-			targetContent  json.RawMessage
-			targetPlanMode database.NullChatPlanMode
-			found          bool
+			targetContent json.RawMessage
+			found         bool
 		)
 		for _, qm := range queuedMessages {
 			if qm.ID == opts.QueuedMessageID {
 				targetContent = qm.Content
-				targetPlanMode = qm.PlanMode
 				found = true
 				break
 			}
@@ -1547,7 +1541,6 @@ func (p *Server) PromoteQueued(
 				Valid:      len(targetContent) > 0,
 			},
 			opts.CreatedBy,
-			targetPlanMode,
 		)
 		if err != nil {
 			return err
@@ -1776,7 +1769,6 @@ func (p *Server) SubmitToolResults(
 			TotalCostMicros:     make([]int64, n),
 			RuntimeMs:           make([]int64, n),
 			ProviderResponseID:  make([]string, n),
-			PlanMode:            make([]string, n),
 		}
 		for i, rc := range resultContents {
 			params.CreatedBy[i] = opts.UserID
@@ -1785,7 +1777,6 @@ func (p *Server) SubmitToolResults(
 			params.Content[i] = string(rc.RawMessage)
 			params.ContentVersion[i] = chatprompt.CurrentContentVersion
 			params.Visibility[i] = database.ChatMessageVisibilityBoth
-			params.PlanMode[i] = ""
 		}
 		if _, insertErr := tx.InsertChatMessages(ctx, params); insertErr != nil {
 			return xerrors.Errorf("insert tool results: %w", insertErr)
@@ -2297,7 +2288,6 @@ func recordManualTitleUsage(
 				TotalCostMicros:     []int64{ptr.NilToDefault(totalCostMicros, 0)},
 				RuntimeMs:           []int64{0},
 				ProviderResponseID:  []string{""},
-				PlanMode:            []string{""},
 			})
 			if err != nil {
 				return xerrors.Errorf("insert manual title usage message: %w", err)
@@ -2419,7 +2409,6 @@ type chatMessage struct {
 	totalCostMicros     int64
 	runtimeMs           int64
 	providerResponseID  string
-	planMode            database.NullChatPlanMode
 }
 
 func newChatMessage(
@@ -2481,11 +2470,6 @@ func (m chatMessage) withProviderResponseID(id string) chatMessage {
 	return m
 }
 
-func (m chatMessage) withPlanMode(mode database.NullChatPlanMode) chatMessage {
-	m.planMode = mode
-	return m
-}
-
 // chainModeInfo holds the information needed to determine whether
 // a follow-up turn can use OpenAI's previous_response_id chaining
 // instead of replaying full conversation history.
@@ -2496,9 +2480,6 @@ type chainModeInfo struct {
 	// modelConfigID is the model configuration used to produce the
 	// assistant message referenced by previousResponseID.
 	modelConfigID uuid.UUID
-	// previousPlanMode is the turn mode of the turn that produced
-	// previousResponseID, when it can be determined from history.
-	previousPlanMode database.NullChatPlanMode
 	// trailingUserCount is the number of contiguous user messages
 	// at the end of the conversation that form the current turn.
 	trailingUserCount int
@@ -2531,45 +2512,6 @@ func userMessageContributesToChainMode(msg database.ChatMessage) bool {
 	return false
 }
 
-func resolvePreviousPlanMode(
-	messages []database.ChatMessage,
-	assistantIdx int,
-) database.NullChatPlanMode {
-	if assistantIdx < 0 || assistantIdx >= len(messages) {
-		return database.NullChatPlanMode{}
-	}
-	planMode := messages[assistantIdx].PlanMode
-	if planMode.Valid && planMode.ChatPlanMode.Valid() {
-		return planMode
-	}
-	for i := assistantIdx - 1; i >= 0; i-- {
-		switch messages[i].Role {
-		case database.ChatMessageRoleAssistant, database.ChatMessageRoleTool:
-			continue
-		case database.ChatMessageRoleUser:
-			return messages[i].PlanMode
-		default:
-			return database.NullChatPlanMode{}
-		}
-	}
-	return database.NullChatPlanMode{}
-}
-
-func chainModePlanModesMatch(
-	current database.NullChatPlanMode,
-	previous database.NullChatPlanMode,
-) bool {
-	currentValid := current.Valid && current.ChatPlanMode.Valid()
-	previousValid := previous.Valid && previous.ChatPlanMode.Valid()
-	if !currentValid && !previousValid {
-		return true
-	}
-	if currentValid != previousValid {
-		return false
-	}
-	return current.ChatPlanMode == previous.ChatPlanMode
-}
-
 // resolveChainMode scans DB messages from the end to count trailing user
 // messages for the current turn and detect whether the immediately
 // preceding assistant/tool block can chain from a provider response ID.
@@ -2591,7 +2533,6 @@ func resolveChainMode(messages []database.ChatMessage) chainModeInfo {
 			if messages[i].ProviderResponseID.Valid &&
 				messages[i].ProviderResponseID.String != "" {
 				info.previousResponseID = messages[i].ProviderResponseID.String
-				info.previousPlanMode = resolvePreviousPlanMode(messages, i)
 				if messages[i].ModelConfigID.Valid {
 					info.modelConfigID = messages[i].ModelConfigID.UUID
 				}
@@ -2675,7 +2616,6 @@ func appendChatMessage(
 	params.TotalCostMicros = append(params.TotalCostMicros, msg.totalCostMicros)
 	params.RuntimeMs = append(params.RuntimeMs, msg.runtimeMs)
 	params.ProviderResponseID = append(params.ProviderResponseID, msg.providerResponseID)
-	params.PlanMode = append(params.PlanMode, string(msg.planMode.ChatPlanMode))
 }
 
 // BuildSingleChatMessageInsertParams creates batch insert params for one
@@ -2707,7 +2647,6 @@ func insertUserMessageAndSetPending(
 	modelConfigID uuid.UUID,
 	content pqtype.NullRawMessage,
 	createdBy uuid.UUID,
-	planMode database.NullChatPlanMode,
 ) (database.ChatMessage, database.Chat, error) {
 	msgParams := database.InsertChatMessagesParams{ //nolint:exhaustruct // Fields populated by appendChatMessage.
 		ChatID: lockedChat.ID,
@@ -2718,7 +2657,7 @@ func insertUserMessageAndSetPending(
 		database.ChatMessageVisibilityBoth,
 		modelConfigID,
 		chatprompt.CurrentContentVersion,
-	).withCreatedBy(createdBy).withPlanMode(planMode))
+	).withCreatedBy(createdBy))
 	messages, err := insertChatMessageWithStore(ctx, store, msgParams)
 	if err != nil {
 		return database.ChatMessage{}, database.Chat{}, err
@@ -4041,7 +3980,7 @@ func (p *Server) tryAutoPromoteQueuedMessage(
 		database.ChatMessageVisibilityBoth,
 		chat.LastModelConfigID,
 		chatprompt.CurrentContentVersion,
-	).withCreatedBy(chat.OwnerID).withPlanMode(nextQueued.PlanMode))
+	).withCreatedBy(chat.OwnerID))
 	msgs, err := insertChatMessageWithStore(ctx, tx, msgParams)
 	if err != nil {
 		logger.Error(ctx, "failed to promote queued message",
@@ -5304,7 +5243,7 @@ func (p *Server) runChat(
 		}))
 		tools = append(tools, p.subagentTools(ctx, func() database.Chat {
 			return chat
-		}, currentPlanMode)...)
+		})...)
 	}
 
 	// Append skill tools when the workspace has skills.
@@ -5401,7 +5340,7 @@ func (p *Server) runChat(
 		chainInfo.previousResponseID != "" &&
 		chainInfo.contributingTrailingUserCount > 0 &&
 		chainInfo.modelConfigID == modelConfig.ID &&
-		chainModePlanModesMatch(currentPlanMode, chainInfo.previousPlanMode)
+		!isPlanModeTurn
 	if chainModeActive {
 		providerOptions = chatprovider.CloneWithPreviousResponseID(
 			providerOptions,
@@ -6313,7 +6252,6 @@ func insertSyntheticToolResultsTx(
 		TotalCostMicros:     make([]int64, n),
 		RuntimeMs:           make([]int64, n),
 		ProviderResponseID:  make([]string, n),
-		PlanMode:            make([]string, n),
 	}
 	for i, rc := range resultContents {
 		params.CreatedBy[i] = uuid.Nil
@@ -6322,7 +6260,6 @@ func insertSyntheticToolResultsTx(
 		params.Content[i] = string(rc.RawMessage)
 		params.ContentVersion[i] = chatprompt.CurrentContentVersion
 		params.Visibility[i] = database.ChatMessageVisibilityBoth
-		params.PlanMode[i] = ""
 	}
 	if _, err := store.InsertChatMessages(ctx, params); err != nil {
 		return xerrors.Errorf("insert synthetic tool results: %w", err)
