@@ -628,7 +628,7 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 		<>
 			<div
 				className={cn(
-					"mx-auto w-full max-w-3xl pb-0 sm:pb-4",
+					"mx-auto w-full max-w-3xl pb-0",
 					isEditingHistoryMessage && "pt-1",
 				)}
 			>
