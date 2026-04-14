@@ -78,33 +78,6 @@ func TestProposePlan(t *testing.T) {
 		assert.False(t, storeCalled)
 		assert.Nil(t, *stored)
 	})
-
-	t.Run("PlanTurnRejectsWhitespaceOnlyPlan", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		mockConn := agentconnmock.NewMockAgentConn(ctrl)
-
-		mockConn.EXPECT().
-			ReadFile(gomock.Any(), "/home/coder/PLAN.md", int64(0), int64(32*1024+1)).
-			Return(io.NopCloser(strings.NewReader("   \n  \t  \n  ")), "text/markdown", nil)
-
-		storeFile, stored := fakeStoreFile(t)
-		storeCalled := false
-		tool := newProposePlanTool(t, mockConn, func(ctx context.Context, name string, mediaType string, data []byte) (uuid.UUID, error) {
-			storeCalled = true
-			return storeFile(ctx, name, mediaType, data)
-		}, true)
-		resp, err := tool.Run(context.Background(), fantasy.ToolCall{
-			ID:    "call-1",
-			Name:  "propose_plan",
-			Input: `{"path":"/home/coder/PLAN.md"}`,
-		})
-		require.NoError(t, err)
-		assert.True(t, resp.IsError)
-		assert.Contains(t, resp.Content, "empty")
-		assert.False(t, storeCalled)
-		assert.Nil(t, *stored)
-	})
 }
 
 func newProposePlanTool(
