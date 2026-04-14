@@ -136,9 +136,9 @@ const ChatInputSkeleton: FC = () => (
 					<Skeleton className="size-7 rounded-full" />
 				</div>
 			</div>
-			<div className="flex items-center gap-1 px-1 pt-1">
-				<Skeleton className="h-6 w-24 rounded" />
-			</div>
+		</div>
+		<div className="mx-auto flex w-full max-w-3xl items-center gap-1 px-1 pt-1">
+			<Skeleton className="h-6 w-24 rounded" />
 		</div>
 	</div>
 );
