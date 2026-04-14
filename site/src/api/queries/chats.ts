@@ -747,10 +747,11 @@ export const setChatUserRole = (
 	{ chatId: string; userId: string; role: TypesGen.ChatRole }
 > => {
 	return {
-		mutationFn: ({ chatId, userId, role }) =>
-			API.experimental.updateChatACL(chatId, {
+		mutationFn: async ({ chatId, userId, role }) => {
+			return API.experimental.updateChatACL(chatId, {
 				user_roles: { [userId]: role },
-			}),
+			});
+		},
 		onSuccess: async (_res, { chatId }) => {
 			await queryClient.invalidateQueries({
 				queryKey: chatACLKey(chatId),

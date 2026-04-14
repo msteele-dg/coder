@@ -1,46 +1,134 @@
-import { ShareIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
-import { type FC, useId, useState } from "react";
+import { EllipsisVertical, ShareIcon, UserPlusIcon } from "lucide-react";
+import { type FC, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { chatACL, setChatUserRole } from "#/api/queries/chats";
-import type * as TypesGen from "#/api/typesGenerated";
-import { Avatar } from "#/components/Avatar/Avatar";
+import type { ChatACLUser } from "#/api/typesGenerated";
+import { AvatarData } from "#/components/Avatar/AvatarData";
 import { Button } from "#/components/Button/Button";
-import { Input } from "#/components/Input/Input";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "#/components/DropdownMenu/DropdownMenu";
+import { EmptyState } from "#/components/EmptyState/EmptyState";
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
 } from "#/components/Popover/Popover";
 import { Spinner } from "#/components/Spinner/Spinner";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "#/components/Table/Table";
+import { TableLoader } from "#/components/TableLoader/TableLoader";
+import {
+	UserOrGroupAutocomplete,
+	type UserOrGroupAutocompleteValue,
+} from "#/modules/workspaces/WorkspaceSharingForm/UserOrGroupAutocomplete";
 
 interface ChatSharePopoverProps {
 	chatId: string;
+	organizationId: string;
 }
 
-export const ChatSharePopover: FC<ChatSharePopoverProps> = ({ chatId }) => {
-	const inputId = useId();
+export const ChatSharePopover: FC<ChatSharePopoverProps> = ({
+	chatId,
+	organizationId,
+}) => {
 	const queryClient = useQueryClient();
-	const [username, setUsername] = useState("");
+	const [selectedOption, setSelectedOption] =
+		useState<UserOrGroupAutocompleteValue>(null);
+
 	const aclQuery = useQuery(chatACL(chatId));
 	const addUserMutation = useMutation(setChatUserRole(queryClient));
 	const removeUserMutation = useMutation(setChatUserRole(queryClient));
 
+	const users = aclQuery.data?.users ?? [];
+
 	const handleAdd = () => {
-		const trimmed = username.trim();
-		if (!trimmed) return;
+		if (!selectedOption) return;
 		addUserMutation.mutate(
-			{ chatId, userId: trimmed, role: "read" },
-			{
-				onSuccess: () => setUsername(""),
-			},
+			{ chatId, userId: selectedOption.id, role: "read" },
+			{ onSuccess: () => setSelectedOption(null) },
 		);
 	};
 
-	const handleRemove = (user: TypesGen.ChatACLUser) => {
+	const handleRemove = (user: ChatACLUser) => {
 		removeUserMutation.mutate({ chatId, userId: user.id, role: "" });
 	};
 
-	const users = aclQuery.data?.users ?? [];
+	const tableHeader = (
+		<TableHeader>
+			<TableRow>
+				<TableHead className="w-[50%] py-2">Member</TableHead>
+				<TableHead className="w-[40%] py-2">Role</TableHead>
+				<TableHead className="w-[10%] py-2" />
+			</TableRow>
+		</TableHeader>
+	);
+
+	const tableBody = (
+		<TableBody>
+			{aclQuery.isLoading ? (
+				<TableLoader />
+			) : users.length === 0 ? (
+				<TableRow>
+					<TableCell colSpan={999}>
+						<EmptyState
+							message="Not shared with anyone yet"
+							description="Add a member using the search above."
+							isCompact
+						/>
+					</TableCell>
+				</TableRow>
+			) : (
+				users.map((user) => (
+					<TableRow key={user.id}>
+						<TableCell className="py-2 w-[50%]">
+							<AvatarData
+								title={user.username}
+								subtitle={user.name}
+								src={user.avatar_url}
+							/>
+						</TableCell>
+						<TableCell className="py-2 w-[40%]">
+							<span className="bg-surface-secondary rounded-md px-3 py-0.5 inline-block text-sm">
+								Read only
+							</span>
+						</TableCell>
+						<TableCell className="py-2 w-[10%]">
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										size="icon-lg"
+										variant="subtle"
+										aria-label="Open menu"
+									>
+										<EllipsisVertical aria-hidden="true" />
+										<span className="sr-only">Open menu</span>
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end">
+									<DropdownMenuItem
+										className="text-content-destructive focus:text-content-destructive"
+										onClick={() => handleRemove(user)}
+									>
+										Remove
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
+						</TableCell>
+					</TableRow>
+				))
+			)}
+		</TableBody>
+	);
 
 	return (
 		<Popover>
@@ -54,86 +142,45 @@ export const ChatSharePopover: FC<ChatSharePopoverProps> = ({ chatId }) => {
 					<ShareIcon className="h-4 w-4" />
 				</Button>
 			</PopoverTrigger>
-			<PopoverContent align="end" className="w-80 p-3">
-				<h3 className="mb-2 text-sm font-medium text-content-primary">
-					Share Chat
-				</h3>
-				<p className="mb-3 text-xs text-content-secondary">
+			<PopoverContent align="end" className="w-[580px] p-4">
+				<h3 className="text-lg font-semibold m-0 mb-1">Share Chat</h3>
+				<p className="mb-4 text-sm text-content-secondary">
 					Add users who can view this chat (read-only).
 				</p>
-				<div className="mb-3 flex gap-2">
-					<Input
-						id={inputId}
-						placeholder="Username"
-						value={username}
-						onChange={(e) => setUsername(e.target.value)}
-						onKeyDown={(e) => {
-							if (e.key === "Enter") {
-								e.preventDefault();
-								handleAdd();
-							}
-						}}
-						className="h-8 text-xs"
-						aria-label="Username to share with"
-					/>
-					<Button
-						size="sm"
-						variant="outline"
-						onClick={handleAdd}
-						disabled={!username.trim() || addUserMutation.isPending}
-						className="h-8 shrink-0"
-					>
-						{addUserMutation.isPending ? (
-							<Spinner className="h-3.5 w-3.5" loading />
-						) : (
-							<UserPlusIcon className="h-3.5 w-3.5" />
-						)}
-						Add
-					</Button>
-				</div>
+
 				{addUserMutation.isError && (
 					<p className="mb-2 text-xs text-content-destructive">
-						Failed to add user. Check the username and try again.
+						Failed to add user. Please try again.
 					</p>
 				)}
-				{aclQuery.isLoading ? (
-					<div className="flex items-center justify-center py-4">
-						<Spinner className="h-4 w-4" loading />
+
+				<form
+					action={handleAdd}
+					className="flex flex-row items-center gap-2 mb-4"
+				>
+					<UserOrGroupAutocomplete
+						organizationId={organizationId}
+						value={selectedOption}
+						exclude={[...users]}
+						onChange={(newValue) => setSelectedOption(newValue)}
+					/>
+					<Button
+						disabled={!selectedOption || addUserMutation.isPending}
+						type="submit"
+					>
+						<Spinner loading={addUserMutation.isPending}>
+							<UserPlusIcon className="size-icon-sm" />
+						</Spinner>
+						Add member
+					</Button>
+				</form>
+
+				<div>
+					<Table>{tableHeader}</Table>
+					<div className="max-h-60 overflow-y-auto">
+						<Table>{tableBody}</Table>
 					</div>
-				) : users.length > 0 ? (
-					<ul className="flex flex-col gap-1">
-						{users.map((user) => (
-							<li
-								key={user.id}
-								className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-surface-secondary"
-							>
-								<Avatar
-									src={user.avatar_url}
-									fallback={user.username.charAt(0).toUpperCase()}
-									size="sm"
-								/>
-								<span className="flex-1 truncate text-content-primary">
-									{user.username}
-								</span>
-								<span className="text-content-secondary">read</span>
-								<Button
-									size="icon"
-									variant="subtle"
-									className="h-6 w-6 shrink-0 text-content-secondary hover:text-content-destructive"
-									onClick={() => handleRemove(user)}
-									disabled={removeUserMutation.isPending}
-									aria-label={`Remove ${user.username}`}
-								>
-									<Trash2Icon className="h-3.5 w-3.5" />
-								</Button>
-							</li>
-						))}
-					</ul>
-				) : (
-					<p className="py-2 text-center text-xs text-content-secondary">
-						Not shared with anyone yet.
-					</p>
-				)}
+				</div>
 			</PopoverContent>
 		</Popover>
 	);

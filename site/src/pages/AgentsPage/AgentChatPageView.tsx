@@ -355,6 +355,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 							{" "}
 							<ChatTopBar
 								chatId={agentId}
+								organizationId={organizationId}
 								chatTitle={chatTitle}
 								parentChat={parentChat}
 								panel={{

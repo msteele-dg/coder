@@ -50,6 +50,7 @@ interface WorkspaceActions {
 
 type ChatTopBarProps = {
 	chatId?: string;
+	organizationId?: string;
 	chatTitle?: string;
 	parentChat?: TypesGen.Chat;
 	panel: SidebarPanelState;
@@ -70,6 +71,7 @@ type ChatTopBarProps = {
 
 export const ChatTopBar: FC<ChatTopBarProps> = ({
 	chatId,
+	organizationId,
 	chatTitle,
 	parentChat,
 	panel,
@@ -195,8 +197,8 @@ export const ChatTopBar: FC<ChatTopBarProps> = ({
 			)}
 			{/* Actions area */}
 			<div className="flex items-center gap-2">
-				{!isEmbedded && isOwner && chatId && (
-					<ChatSharePopover chatId={chatId} />
+				{!isEmbedded && isOwner && chatId && organizationId && (
+					<ChatSharePopover chatId={chatId} organizationId={organizationId} />
 				)}
 				{!isEmbedded && (
 					<DropdownMenu>
