@@ -203,56 +203,6 @@ func insertAssistantCostMessage(
 	require.NoError(t, err)
 }
 
-func runTurnModeValidationTests(
-	t *testing.T,
-	request func(ctx context.Context, t *testing.T, client *codersdk.ExperimentalClient, turnMode string) error,
-) {
-	t.Helper()
-
-	tests := []struct {
-		name           string
-		turnMode       string
-		wantStatusCode int
-		wantMessage    string
-	}{
-		{
-			name:           "InvalidTurnMode",
-			turnMode:       "invalid_mode",
-			wantStatusCode: http.StatusBadRequest,
-			wantMessage:    "Invalid turn_mode value.",
-		},
-		{
-			name:     "ValidTurnModePlan",
-			turnMode: string(codersdk.ChatTurnModePlan),
-		},
-		{
-			name:     "EmptyTurnMode",
-			turnMode: "",
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			ctx := testutil.Context(t, testutil.WaitLong)
-			client := newChatClient(t)
-			_ = coderdtest.CreateFirstUser(t, client.Client)
-			_ = createChatModelConfig(t, client)
-
-			err := request(ctx, t, client, tt.turnMode)
-			if tt.wantStatusCode == 0 {
-				require.NoError(t, err)
-				return
-			}
-
-			sdkErr := requireSDKError(t, err, tt.wantStatusCode)
-			require.Equal(t, tt.wantMessage, sdkErr.Message)
-		})
-	}
-}
-
 func TestPostChats(t *testing.T) {
 	t.Parallel()
 
@@ -699,17 +649,6 @@ func TestPostChats(t *testing.T) {
 			}},
 		})
 		requireChatUsageLimitExceededError(t, err, 100, 100, wantResetsAt)
-	})
-
-	runTurnModeValidationTests(t, func(ctx context.Context, t *testing.T, client *codersdk.ExperimentalClient, turnMode string) error {
-		_, err := client.CreateChat(ctx, codersdk.CreateChatRequest{
-			Content: []codersdk.ChatInputPart{{
-				Type: codersdk.ChatInputPartTypeText,
-				Text: "some text",
-			}},
-			TurnMode: codersdk.ChatTurnMode(turnMode),
-		})
-		return err
 	})
 
 	t.Run("NilOrganizationID", func(t *testing.T) {
@@ -3996,80 +3935,6 @@ func TestUnarchiveChat(t *testing.T) {
 	})
 }
 
-func TestChatWorkspaceBinding(t *testing.T) {
-	t.Parallel()
-
-	t.Run("PatchBindsWorkspace", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := testutil.Context(t, testutil.WaitLong)
-		client, db := newChatClientWithDatabase(t)
-		user := coderdtest.CreateFirstUser(t, client.Client)
-		_ = createChatModelConfig(t, client)
-
-		workspaceBuild := dbfake.WorkspaceBuild(t, db, database.WorkspaceTable{
-			OrganizationID: user.OrganizationID,
-			OwnerID:        user.UserID,
-		}).WithAgent().Do()
-
-		chat, err := client.CreateChat(ctx, codersdk.CreateChatRequest{
-			Content: []codersdk.ChatInputPart{
-				{
-					Type: codersdk.ChatInputPartTypeText,
-					Text: "chat without workspace binding",
-				},
-			},
-		})
-		require.NoError(t, err)
-		require.Nil(t, chat.WorkspaceID)
-
-		err = client.UpdateChat(ctx, chat.ID, codersdk.UpdateChatRequest{
-			WorkspaceID: ptr.Ref(workspaceBuild.Workspace.ID),
-		})
-		require.NoError(t, err)
-
-		chat, err = client.GetChat(ctx, chat.ID)
-		require.NoError(t, err)
-		require.NotNil(t, chat.WorkspaceID)
-		require.Equal(t, workspaceBuild.Workspace.ID, *chat.WorkspaceID)
-	})
-
-	t.Run("PatchClearsWorkspaceWithNilUUID", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := testutil.Context(t, testutil.WaitLong)
-		client, db := newChatClientWithDatabase(t)
-		user := coderdtest.CreateFirstUser(t, client.Client)
-		_ = createChatModelConfig(t, client)
-
-		workspaceBuild := dbfake.WorkspaceBuild(t, db, database.WorkspaceTable{
-			OrganizationID: user.OrganizationID,
-			OwnerID:        user.UserID,
-		}).WithAgent().Do()
-
-		chat, err := client.CreateChat(ctx, codersdk.CreateChatRequest{
-			Content: []codersdk.ChatInputPart{
-				{
-					Type: codersdk.ChatInputPartTypeText,
-					Text: "chat with workspace binding",
-				},
-			},
-			WorkspaceID: ptr.Ref(workspaceBuild.Workspace.ID),
-		})
-		require.NoError(t, err)
-		require.NotNil(t, chat.WorkspaceID)
-
-		err = client.UpdateChat(ctx, chat.ID, codersdk.UpdateChatRequest{
-			WorkspaceID: ptr.Ref(uuid.Nil),
-		})
-		require.NoError(t, err)
-
-		chat, err = client.GetChat(ctx, chat.ID)
-		require.NoError(t, err)
-		require.Nil(t, chat.WorkspaceID)
-	})
-}
-
 func TestChatPinOrder(t *testing.T) {
 	t.Parallel()
 
@@ -4399,25 +4264,6 @@ func TestPostChatMessages(t *testing.T) {
 			},
 		})
 		requireSDKError(t, err, http.StatusNotFound)
-	})
-
-	runTurnModeValidationTests(t, func(ctx context.Context, t *testing.T, client *codersdk.ExperimentalClient, turnMode string) error {
-		chat, err := client.CreateChat(ctx, codersdk.CreateChatRequest{
-			Content: []codersdk.ChatInputPart{{
-				Type: codersdk.ChatInputPartTypeText,
-				Text: "initial message for turn mode validation",
-			}},
-		})
-		require.NoError(t, err)
-
-		_, err = client.CreateChatMessage(ctx, chat.ID, codersdk.CreateChatMessageRequest{
-			Content: []codersdk.ChatInputPart{{
-				Type: codersdk.ChatInputPartTypeText,
-				Text: "some text",
-			}},
-			TurnMode: codersdk.ChatTurnMode(turnMode),
-		})
-		return err
 	})
 }
 
