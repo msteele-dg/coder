@@ -130,15 +130,15 @@ const ChatInputSkeleton: FC = () => (
 	<div className="shrink-0 overflow-y-auto px-4 [scrollbar-gutter:stable] [scrollbar-width:thin]">
 		<div className="mx-auto w-full max-w-3xl pb-0 sm:pb-4">
 			<div className="rounded-2xl border border-border-default/80 bg-surface-secondary/45 p-1 shadow-sm">
-				<div className="flex items-center gap-1.5 px-2.5 pt-1">
-					<Skeleton className="h-6 w-24 rounded" />
-				</div>
 				<div className="min-h-[60px] sm:min-h-24 px-3 py-2" />
 				<div className="flex items-center justify-between gap-2 px-2.5 pb-1.5">
 					<Skeleton className="size-7 rounded-full" />
 					<Skeleton className="size-7 rounded-full" />
 				</div>
-			</div>{" "}
+			</div>
+			<div className="flex items-center gap-1 px-1 pt-1">
+				<Skeleton className="h-6 w-24 rounded" />
+			</div>
 		</div>
 	</div>
 );

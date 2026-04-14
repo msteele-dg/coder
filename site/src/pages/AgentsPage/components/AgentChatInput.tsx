@@ -663,36 +663,6 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 				onDragLeave={onAttach ? handleDragLeave : undefined}
 				onDrop={onAttach ? handleDrop : undefined}
 			>
-				{/* Selector row — org and model pickers at the top of the composer. */}
-				{(showOrgSelector || !isModelCatalogLoading) && (
-					<div className="flex items-center gap-1 px-2.5 pt-1">
-						{showOrgSelector && orgOptions && (
-							<CompactOrgSelector
-								value={selectedOrg ?? null}
-								onChange={onOrgChange ?? (() => {})}
-								options={orgOptions}
-								disabled={isOrgDisabled || isDisabled || !onOrgChange}
-								dropdownSide="bottom"
-								dropdownAlign="start"
-							/>
-						)}
-						{isModelCatalogLoading ? (
-							<Skeleton className="h-6 w-24 rounded" />
-						) : (
-							<ModelSelector
-								value={selectedModel}
-								onValueChange={onModelChange}
-								options={modelOptions}
-								disabled={isDisabled}
-								placeholder={modelSelectorPlaceholder}
-								formatProviderLabel={formatProviderLabel}
-								dropdownSide="bottom"
-								dropdownAlign="start"
-							/>
-						)}
-					</div>
-				)}
-
 				{editingQueuedMessageID !== null && (
 					<div className="flex items-center justify-between border-b border-border-default/70 bg-surface-primary/25 px-3 py-1.5">
 						<span className="text-sm text-content-secondary">
@@ -1075,6 +1045,35 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 						)}
 					</div>
 				</div>
+				{/* Selector row — org and model pickers below the composer. */}
+				{(showOrgSelector || !isModelCatalogLoading) && (
+					<div className="flex items-center gap-1 px-1 pt-1">
+						{showOrgSelector && orgOptions && (
+							<CompactOrgSelector
+								value={selectedOrg ?? null}
+								onChange={onOrgChange ?? (() => {})}
+								options={orgOptions}
+								disabled={isOrgDisabled || isDisabled || !onOrgChange}
+								dropdownSide="top"
+								dropdownAlign="start"
+							/>
+						)}
+						{isModelCatalogLoading ? (
+							<Skeleton className="h-6 w-24 rounded" />
+						) : (
+							<ModelSelector
+								value={selectedModel}
+								onValueChange={onModelChange}
+								options={modelOptions}
+								disabled={isDisabled}
+								placeholder={modelSelectorPlaceholder}
+								formatProviderLabel={formatProviderLabel}
+								dropdownSide="top"
+								dropdownAlign="start"
+							/>
+						)}
+					</div>
+				)}
 			</div>
 		</div>
 	);
